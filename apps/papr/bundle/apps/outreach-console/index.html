@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Outreach Console</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="connections.css" />
   </head>
   <body>
     <header class="bar">
@@ -13,7 +14,7 @@
         <p class="sub" id="summary">Loading…</p>
       </div>
       <div class="bar-actions">
-        <button class="ghost" id="refresh" type="button" aria-label="Refresh">Refresh</button>
+        <a href="publishing.html" class="button">Publishing Studio ↗</a><button class="ghost" id="refresh" type="button" aria-label="Refresh">Refresh</button>
         <button class="danger" id="stop-all" type="button">Stop all sending</button>
       </div>
     </header>
@@ -21,11 +22,31 @@
     <main>
       <section class="panel" aria-labelledby="next-title">
         <div class="panel-head">
-          <h2 id="next-title">Next 24 hours</h2>
-          <span class="hint">Everything that will leave, what is holding it, and the one control that stops it.</span>
+          <h2 id="next-title">Today</h2>
+          <span class="hint">Outreach queue and content calendar posts that will leave from the Daytona worker.</span>
         </div>
         <ol class="timeline" id="timeline"></ol>
       </section>
+
+      <section class="panel" aria-labelledby="calendar-title">
+        <div class="panel-head">
+          <h2 id="calendar-title">Content calendar</h2>
+          <span class="hint">Scheduled social.publish actions (Buffer-style).</span>
+        </div>
+        <div class="row"><button id="create-post" type="button">Create a post</button><button id="create-task" type="button">Schedule message or browser action</button></div>
+        <h3>Drafts</h3><ul class="cards" id="content-drafts"></ul>
+        <h3>Scheduled posts</h3><ul class="cards" id="calendar"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="social-title">
+        <div class="panel-head">
+          <h2 id="social-title">Accounts & connections</h2>
+          <span class="hint">Connect your accounts here whenever you are ready.</span>
+        </div>
+        <div id="social" class="social-panel"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="mail-drafts-title"><h2 id="mail-drafts-title">Mailbox drafts</h2><p class="hint">Create and edit drafts in Gmail or Outlook. These controls never send email.</p><div id="mail-accounts"></div><ul id="mail-drafts" class="cards"></ul></section>
 
       <div class="columns">
         <section class="panel" aria-labelledby="approvals-title">
@@ -51,5 +72,6 @@
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <template id="empty"><li class="empty"></li></template>
     <script src="app.js"></script>
+    <script type="module" src="publishing/navigation.js"></script>
   </body>
 </html>

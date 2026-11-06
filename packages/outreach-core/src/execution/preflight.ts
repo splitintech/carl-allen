@@ -1,9 +1,16 @@
-import { purposePermitted, ulid, type ProviderPurpose, type SqlDatabase } from '@splitin/outreach-contracts';
+import {
+  purposePermitted,
+  ulid,
+  type CapabilitySnapshot,
+  type ProviderPurpose,
+  type SqlDatabase,
+} from '@splitin/outreach-contracts';
 import { loadAccount, loadAction, transitionAction, type Actor } from './actions-repo';
 import { engagedKillSwitch } from './kill-switches';
 import { reserveBudget } from './rate';
 import {
   resolveConfig,
+  actionExecuteLease,
   type ActionRow,
   type ExecutionDeps,
   type PreflightCheck,
@@ -41,6 +48,10 @@ function isEmail(action: ActionRow): boolean {
   return action.kind === 'email.send' || action.kind === 'email.reply';
 }
 
+function isSocial(action: ActionRow): boolean {
+  return action.kind.startsWith('social.');
+}
+
 export function recipientAllowed(gate: SendGate, recipient: string | null): boolean {
   if (gate.mode === 'open') return true;
   if (!recipient) return false;
@@ -64,7 +75,7 @@ function builtInChecks(deps: ExecutionDeps): { before: PreflightCheck[]; after: 
     if (action.kind === 'manual.task') return { kind: 'pass' };
     if (!acct) return { kind: 'review', reason: 'provider_account_missing' };
     if (!adapter) return { kind: 'review', reason: `adapter_not_registered:${acct.provider}` };
-    if (acct.health !== 'ok' && acct.health !== 'degraded') {
+    if ((isSocial(action) || action.kind === 'browser.task') ? acct.health !== 'ok' : acct.health !== 'ok' && acct.health !== 'degraded') {
       return { kind: 'defer', until: now + config.unhealthyAccountDeferMs, reason: `account_${acct.health}` };
     }
     if (isEmail(action)) {
@@ -73,6 +84,28 @@ function builtInChecks(deps: ExecutionDeps): { before: PreflightCheck[]; after: 
       const accountPurposes = JSON.parse(acct.purposes) as ProviderPurpose[];
       if (!purposePermitted(purpose, adapter.purposes, accountPurposes)) {
         return { kind: 'review', reason: `purpose_not_permitted:${purpose}` };
+      }
+    }
+    if (isSocial(action) || action.kind === 'browser.task') {
+      if (isSocial(action) && !adapter.social) return { kind: 'review', reason: 'unsupported:social' };
+      if (action.kind === 'social.connect' && !adapter.social?.connect) return { kind: 'review', reason: 'unsupported:social.connect' };
+      if (action.kind === 'browser.task' && !adapter.browser) return { kind: 'review', reason: 'unsupported:browser.task' };
+      const caps = JSON.parse(acct.capabilities || '{}') as CapabilitySnapshot;
+      if (caps.executionPlacement !== 'daytona-browser') {
+        return { kind: 'review', reason: 'social_requires_daytona_browser' };
+      }
+      if(action.kind==='browser.task'){
+        const payload=JSON.parse(action.payload) as {recipeId:string;recipeHash?:string};
+        if(!payload.recipeHash||caps.browserRecipeHashes?.[payload.recipeId]!==payload.recipeHash)return {kind:'review',reason:'browser_recipe_definition_changed'};
+      }
+      const channel = (JSON.parse(action.payload) as {channel?:string}).channel;
+      if (channel && caps.socialChannels && !caps.socialChannels.includes(channel)) return {kind:'review',reason:`unsupported_channel:${channel}`};
+      const flag = action.kind === 'social.publish' ? caps.socialPublish : action.kind === 'social.message' ? caps.socialMessage : action.kind === 'social.connect' ? caps.socialConnect : caps.browserTasks;
+      if (flag !== true) return { kind: 'review', reason: `capability_not_declared:${action.kind}` };
+      const need: ProviderPurpose = action.kind === 'browser.task' ? (action.purpose ?? 'manual_correspondence') as ProviderPurpose : action.kind === 'social.publish' ? 'social_publishing' : 'social_messaging';
+      const accountPurposes = JSON.parse(acct.purposes) as ProviderPurpose[];
+      if (!purposePermitted(need, adapter.purposes, accountPurposes)) {
+        return { kind: 'review', reason: `purpose_not_permitted:${need}` };
       }
     }
     if (action.kind === 'notify.publish' && !adapter.notify) return { kind: 'review', reason: 'unsupported:notify' };
@@ -113,7 +146,6 @@ function applyVerdict(deps: ExecutionDeps, input: PreflightInput, verdict: Prefl
  * reserve rate budget, then commit `executing` plus a pending attempt BEFORE the provider is called.
  */
 export function preflight(deps: ExecutionDeps, actionId: string, actor: Actor): PreflightOutcome {
-  const config = resolveConfig(deps);
   const db: SqlDatabase = deps.db;
   return db.transaction((): PreflightOutcome => {
     const now = deps.now();
@@ -151,7 +183,7 @@ export function preflight(deps: ExecutionDeps, actionId: string, actor: Actor): 
     ).run(attemptId, action.id, attemptNo, JSON.stringify(reservations), now);
     const executing = transitionAction(db, action, 'executing', now, actor, {
       attempt_count: attemptNo,
-      lease_expires_at: now + config.executeLeaseMs,
+      lease_expires_at: now + actionExecuteLease(deps, action),
       state_reason: null,
     });
     return { kind: 'go', action: executing, attemptId, attemptNo, reservations };

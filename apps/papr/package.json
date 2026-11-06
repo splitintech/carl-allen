@@ -13,7 +13,8 @@
     "@splitin/outreach-core": "0.0.0",
     "@splitin/outreach-fakes": "0.0.0",
     "@splitin/outreach-server": "0.0.0",
-    "@splitin/outreach-store-sqlite": "0.0.0"
+    "@splitin/outreach-store-sqlite": "0.0.0",
+    "playwright": "^1.56.1"
   },
   "repository": {
     "type": "git",

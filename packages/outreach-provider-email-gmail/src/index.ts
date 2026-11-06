@@ -1,3 +1,4 @@
+import { gmailDrafts } from './drafts';
 import { TokenError, type AccessTokenSource, type AccountPort, type ProviderAdapter, type ProviderPurpose } from '@splitin/outreach-contracts';
 import { ProviderNetworkError } from '@splitin/outreach-provider-kit';
 import { GMAIL_API, gmailRequest, type HttpDeps } from './http';
@@ -11,7 +12,7 @@ export { authorizeGoogle, GOOGLE_AUTH_URL, type GoogleAuthorization, type Google
 export { GOOGLE_TOKEN_URL, googleRefreshTokenSource, parseGoogleGrant, type GoogleGrant, type GoogleTokenOptions } from './token';
 
 /** OAuth scopes the adapter needs: send, plus read for reconciliation (Sent search) and replies (History). */
-export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.readonly'] as const;
+export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose'] as const;
 
 export interface GmailAdapterOptions {
   /**
@@ -86,6 +87,7 @@ export function gmailAdapter(options: GmailAdapterOptions = {}): ProviderAdapter
     name: 'gmail',
     purposes: options.purposes ?? ['manual_correspondence'],
     account,
+    drafts: gmailDrafts(http, tokens),
     email: gmailSender({ http, tokens, settleMs: options.settleMs ?? 180_000 }),
     mailbox: gmailMailbox({ http, tokens, ...(options.pollBudget ? { budget: options.pollBudget } : {}) }),
   };

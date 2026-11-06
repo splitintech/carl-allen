@@ -18,9 +18,17 @@ function engineActor(action: ActionRow): Actor {
 }
 
 function policyOf(db: SqlDatabase, action: ActionRow): Policy | null {
-  if (!action.enrollment_id) return null;
-  const enrollment = loadEnrollment(db, action.enrollment_id);
-  const version = enrollment ? loadVersion(db, enrollment.campaign_version_id) : undefined;
+  if (action.enrollment_id) {
+    const enrollment = loadEnrollment(db, action.enrollment_id);
+    const version = enrollment ? loadVersion(db, enrollment.campaign_version_id) : undefined;
+    return version ? (JSON.parse(version.policy) as Policy) : null;
+  }
+  if (!action.campaign_id) return (JSON.parse(action.payload) as {_policy?:Policy})._policy ?? null;
+  const version = db
+    .prepare(
+      `SELECT cv.policy FROM campaigns c JOIN campaign_versions cv ON cv.id = c.active_version_id WHERE c.id = ?`,
+    )
+    .get<{ policy: string }>(action.campaign_id);
   return version ? (JSON.parse(version.policy) as Policy) : null;
 }
 
@@ -40,8 +48,13 @@ export function domainChecks(): PreflightCheck[] {
     return row?.status === 'active' ? { kind: 'pass' } : { kind: 'cancel', reason: `campaign_${row?.status ?? 'missing'}` };
   };
   const notSuppressed: PreflightCheck = ({ db, action }) => {
+    if (action.kind.startsWith('social.') && action.enrollment_id) {
+      const contact = db.prepare('SELECT contact_id FROM enrollments WHERE id=?').get<{contact_id:string}>(action.enrollment_id);
+      const points = contact ? db.prepare('SELECT value_norm FROM contact_points WHERE contact_id=?').all<{value_norm:string}>(contact.contact_id) : [];
+      for (const point of points) { const hit = isSuppressed(db, action.workspace_id, point.value_norm, action.provider_account_id, (JSON.parse(action.payload) as {channel?:string}).channel); if(hit) return {kind:'cancel',reason:`suppressed:${hit}`}; }
+    }
     if (!action.recipient_norm || action.kind === 'notify.publish') return { kind: 'pass' };
-    const hit = isSuppressed(db, action.workspace_id, action.recipient_norm, action.provider_account_id);
+    const hit = isSuppressed(db, action.workspace_id, action.recipient_norm, action.provider_account_id, action.kind.startsWith('social.') ? (JSON.parse(action.payload) as {channel?:string}).channel : undefined);
     return hit ? { kind: 'cancel', reason: `suppressed:${hit}` } : { kind: 'pass' };
   };
   // Re-checked at send time: the policy may have changed since the audience was snapshotted.
@@ -52,13 +65,18 @@ export function domainChecks(): PreflightCheck[] {
   };
   const approved: PreflightCheck = ({ db, action, now }) => approvalVerdict(db, action, now);
   const inWindow: PreflightCheck = ({ db, action, now }) => {
-    if (action.kind !== 'email.send' && action.kind !== 'email.reply') return { kind: 'pass' };
+    const gated = action.kind === 'email.send' || action.kind === 'email.reply' || action.kind.startsWith('social.') || action.kind === 'browser.task';
+    if (!gated) return { kind: 'pass' };
     const policy = policyOf(db, action);
-    if (!policy || !action.enrollment_id) return { kind: 'pass' };
-    const contact = db
-      .prepare('SELECT c.timezone FROM enrollments e JOIN contacts c ON c.id = e.contact_id WHERE e.id = ?')
-      .get<{ timezone: string | null }>(action.enrollment_id);
-    const slot = nextSlot(now, policy.window, resolveZone(policy.window, contact?.timezone));
+    if (!policy) return { kind: 'pass' };
+    let zone = resolveZone(policy.window, null);
+    if (action.enrollment_id) {
+      const contact = db
+        .prepare('SELECT c.timezone FROM enrollments e JOIN contacts c ON c.id = e.contact_id WHERE e.id = ?')
+        .get<{ timezone: string | null }>(action.enrollment_id);
+      zone = resolveZone(policy.window, contact?.timezone);
+    }
+    const slot = nextSlot(now, policy.window, zone);
     return slot > now ? { kind: 'defer', until: slot, reason: 'outside_send_window' } : { kind: 'pass' };
   };
   return [enrollmentLive, campaignLive, notSuppressed, lawfulBasis, approved, inWindow];
@@ -67,12 +85,25 @@ export function domainChecks(): PreflightCheck[] {
 /** Per-campaign budgets from the playbook policy; notifications and manual tasks are not budgeted. */
 export function domainRatePolicy(db: SqlDatabase, action: ActionRow): RatePolicy {
   const policy = policyOf(db, action);
-  if (!policy || (action.kind !== 'email.send' && action.kind !== 'email.reply')) return { limits: [] };
+  const isEmail = action.kind === 'email.send' || action.kind === 'email.reply';
+  const isSocial = action.kind.startsWith('social.') || action.kind === 'browser.task';
+  if (!policy) return isSocial ? { limits: [{scopeKey:`account:${action.provider_account_id}:day`,windowMs:DAY_MS,limit:10}] } : {limits:[]};
+  if (!isEmail && !isSocial) return { limits: [] };
   const limits: RateLimit[] = [
     { scopeKey: `account:${action.provider_account_id}:day`, windowMs: DAY_MS, limit: policy.limits.accountPerDay },
   ];
-  const domain = action.recipient_norm?.split('@')[1];
-  if (domain) limits.push({ scopeKey: `domain:${domain}:day`, windowMs: DAY_MS, limit: policy.limits.domainPerDay });
+  if (isEmail) {
+    const domain = action.recipient_norm?.split('@')[1];
+    if (domain) limits.push({ scopeKey: `domain:${domain}:day`, windowMs: DAY_MS, limit: policy.limits.domainPerDay });
+  }
+  if (isSocial) {
+    const channel = (JSON.parse(action.payload) as { channel?: string }).channel ?? 'social';
+    limits.push({
+      scopeKey: `channel:${action.provider_account_id}:${channel}:day`,
+      windowMs: DAY_MS,
+      limit: policy.limits.channelPerDay ?? 10,
+    });
+  }
   if (policy.limits.campaignPerDay && action.campaign_id) {
     limits.push({ scopeKey: `campaign:${action.campaign_id}:day`, windowMs: DAY_MS, limit: policy.limits.campaignPerDay });
   }

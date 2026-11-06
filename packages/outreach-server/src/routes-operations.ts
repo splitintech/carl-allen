@@ -8,6 +8,7 @@ import {
   setKillSwitchAs,
   type Engine,
 } from '@splitin/outreach-core';
+import type { CapabilitySnapshot, ProviderAdapter } from '@splitin/outreach-contracts';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { auth, type ServerEnv } from './app';
@@ -56,5 +57,45 @@ export function registerOperationRoutes(app: Hono<ServerEnv>, engine: Engine): v
       .parse(await c.req.json());
     setKillSwitchAs(engine, auth(c), { scope: body.scope, engaged: body.engaged, reason: body.reason, ...(body.targetId ? { targetId: body.targetId } : {}) });
     return c.json({ scope: body.scope, engaged: body.engaged });
+  });
+
+  /** Daytona social session status for the Outreach Console Connections panel (ADR 0006). */
+  app.get('/v1/social/status', (c) => {
+    const ctx = auth(c);
+    const liveViewUrl = process.env.OUTREACH_DAYTONA_LIVE_VIEW_URL ?? null;
+    const accounts = engine.db
+      .prepare(
+        `SELECT id, provider, external_account_id, health, health_detail, capabilities, purposes
+         FROM provider_accounts WHERE workspace_id = ? ORDER BY id`,
+      )
+      .all<{
+        id: string;
+        provider: string;
+        external_account_id: string;
+        health: string;
+        health_detail: string | null;
+        capabilities: string;
+        purposes: string;
+      }>(ctx.workspaceId);
+    const social = accounts
+      .map((row) => {
+        const caps = JSON.parse(row.capabilities || '{}') as CapabilitySnapshot;
+        const adapter = engine.adapters.get(row.provider) as ProviderAdapter | undefined;
+        if (!adapter?.social && caps.executionPlacement !== 'daytona-browser') return null;
+        return {
+          id: row.id,
+          provider: row.provider,
+          externalAccountId: row.external_account_id,
+          health: row.health,
+          detail: row.health_detail,
+          executionPlacement: caps.executionPlacement ?? null,
+          socialPublish: caps.socialPublish === true,
+          socialMessage: caps.socialMessage === true,
+          purposes: JSON.parse(row.purposes) as string[],
+          reconnectNeeded: row.health === 'reauth_required',
+        };
+      })
+      .filter(Boolean);
+    return c.json({ liveViewUrl, accounts: social });
   });
 }

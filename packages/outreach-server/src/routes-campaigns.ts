@@ -1,10 +1,13 @@
 import {
+  activateContentCampaign,
   campaignStatus,
   commitActivation,
   createCampaign,
+  createContentCampaign,
   decideApproval,
   listApprovals,
   listCampaigns,
+  listContentCalendar,
   prepareActivation,
   requireRole,
   requestBatchApproval,
@@ -18,6 +21,13 @@ import { z } from 'zod';
 import { auth, type ServerEnv } from './app';
 
 const reason = z.object({ reason: z.string().min(1).max(500) }).strict();
+const calendarBody = z
+  .object({
+    name: z.string().min(1).max(200),
+    calendar: z.union([z.string().max(100_000), z.record(z.string(), z.unknown())]),
+    providerAccountId: z.string().min(1),
+  })
+  .strict();
 
 export function registerCampaignRoutes(app: Hono<ServerEnv>, engine: Engine): void {
   app.get('/v1/campaigns', (c) => c.json({ campaigns: listCampaigns(engine, auth(c)) }));
@@ -25,6 +35,18 @@ export function registerCampaignRoutes(app: Hono<ServerEnv>, engine: Engine): vo
   app.post('/v1/campaigns', async (c) => {
     const body = z.object({ name: z.string().min(1).max(200), playbook: z.union([z.string().max(100_000), z.record(z.string(), z.unknown())]), providerAccountId: z.string().min(1) }).strict().parse(await c.req.json());
     return c.json(createCampaign(engine, auth(c), body), 201);
+  });
+
+  app.post('/v1/content-campaigns', async (c) => {
+    const body = calendarBody.parse(await c.req.json());
+    return c.json(createContentCampaign(engine, auth(c), body), 201);
+  });
+
+  app.post('/v1/content-campaigns/:id/activate', (c) => c.json(activateContentCampaign(engine, auth(c), c.req.param('id'))));
+
+  app.get('/v1/content-calendar', (c) => {
+    const hours = z.coerce.number().int().min(1).max(720).default(168).parse(c.req.query('hours') ?? undefined);
+    return c.json(listContentCalendar(engine, auth(c), hours));
   });
 
   app.get('/v1/campaigns/:id', (c) => c.json(campaignStatus(engine, auth(c), c.req.param('id'))));

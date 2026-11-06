@@ -22,7 +22,16 @@ export const ACTION_STATES = [
 
 export type ActionState = (typeof ACTION_STATES)[number];
 
-export const ACTION_KINDS = ['email.send', 'email.reply', 'notify.publish', 'manual.task'] as const;
+export const ACTION_KINDS = [
+  'email.send',
+  'email.reply',
+  'notify.publish',
+  'manual.task',
+  'social.publish',
+  'social.message',
+  'social.connect',
+  'browser.task',
+] as const;
 
 export type ActionKind = (typeof ACTION_KINDS)[number];
 

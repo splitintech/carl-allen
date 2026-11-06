@@ -133,7 +133,18 @@ spec:
   it('returns the overview the console renders', async () => {
     const result = await withEnv(approverToken, () => handle('overview'));
     expect(result.ok).toBe(true);
-    expect(Object.keys(result.data ?? {}).sort()).toEqual(['approvals', 'campaigns', 'review', 'statuses', 'tasks', 'upcoming']);
+    expect(Object.keys(result.data ?? {}).sort()).toEqual([
+      'accounts',
+      'approvals',
+      'calendar',
+      'campaigns',
+      'content',
+      'review',
+      'social',
+      'statuses',
+      'tasks',
+      'upcoming',
+    ]);
     expect((result.data as unknown as { approvals: unknown[] }).approvals).toHaveLength(1);
   });
 

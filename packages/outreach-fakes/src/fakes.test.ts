@@ -3,10 +3,13 @@ import type { ProviderContext } from '@splitin/outreach-contracts';
 import {
   EMAIL_SENDER_CONFORMANCE,
   FAKE_EMAIL_SECRET,
+  FAKE_SOCIAL_SECRET,
   FAKE_WEBHOOK_SECRET,
   FakeEmailProvider,
   FakeNotifier,
+  FakeSocialProvider,
   runEmailSenderConformance,
+  runSocialBrowserConformance,
   staticSecrets,
 } from './index';
 
@@ -148,5 +151,23 @@ describe('FakeNotifier', () => {
     expect((await port.publish(ctxFor(), note)).kind).toBe('rejected');
     expect((await port.publish(ctxFor(), note)).kind).toBe('accepted');
     expect(notifier.published).toHaveLength(1);
+  });
+});
+
+describe('FakeSocialProvider conformance', () => {
+  it('passes publish/message/health cases', async () => {
+    const fake = new FakeSocialProvider();
+    const social = fake.adapter().social!;
+    const skipped = await runSocialBrowserConformance(() => ({
+      social,
+      ctx: { ...ctxFor(), account: { ...ctxFor().account, provider: 'fake-social' }, secrets: staticSecrets({ 'env:FAKE': FAKE_SOCIAL_SECRET }), secretRef: 'env:FAKE' },
+      secretValue: FAKE_SOCIAL_SECRET,
+      channel: 'linkedin',
+      targetUrl: 'https://www.linkedin.com/in/example',
+      force: (mode) => void fake.script(mode),
+    }));
+    expect(skipped).toEqual([]);
+    expect(fake.publishCalls).toBeGreaterThan(0);
+    expect(fake.messageCalls).toBeGreaterThan(0);
   });
 });

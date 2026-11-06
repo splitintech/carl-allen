@@ -1,0 +1,47 @@
+/* Account onboarding shares the console's restrained, paper-like surfaces. */
+.connection-intro { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 8px 0 22px; }
+.connection-intro h3 { font-size: 21px; color: var(--ink); font-weight: 600; letter-spacing: -0.03em; margin: 4px 0 8px; }
+.connection-eyebrow { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin: 0; }
+.connection-count { flex: 0 0 auto; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; }
+.connection-providers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.connection-provider { border: 1px solid var(--line); border-radius: 12px; padding: 18px 16px 14px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.connection-provider h3 { margin: 0 0 4px; color: var(--ink); font-size: 15px; }
+.connection-provider .hint { font-size: 12px; }
+.connection-provider button { margin-top: auto; border-radius: 8px; width: 100%; padding: 9px; font-size: 12px; text-align: left; }
+.provider-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; font-size: 20px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
+.provider-linkedin { background: #0a66c2; color: #fff; font-family: Georgia, serif; }
+.connection-provider-tag { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.connection-footnote { font-size: 12px; color: var(--muted); margin: 14px 0 24px; }
+.connection-empty { color: var(--muted); background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 20px; margin-bottom: 0; }
+.connection-accounts { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.connection-account { min-width: 0; }
+.connection-account-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.connection-identity { overflow-wrap: anywhere; margin: 0; font-size: 12px; color: var(--muted); }
+.connection-login { color: var(--accent); padding: 6px 0; font-size: 13px; text-underline-offset: 3px; }
+.connection-dialog { width: min(520px, calc(100vw - 32px)); max-width: 520px; max-height: calc(100vh - 32px); overflow: auto; }
+.connection-dialog > h2 { font-size: 21px; letter-spacing: -.03em; margin-bottom: 10px; }
+.connection-dialog > .row { margin-top: 22px; }
+.connection-content { margin-top: 24px; display: grid; gap: 14px; }
+.connection-content p { margin: 0; }
+.connection-form { display: grid; gap: 10px !important; }
+.connection-form label { font-weight: 600; font-size: 12px; margin-top: 6px; }
+.connection-form button { margin-top: 12px; padding: 10px; border-radius: 8px; }
+.connection-step { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.connection-content h3 { margin: 0; font-size: 17px; color: var(--ink); }
+.connection-content .connection-ready { color: var(--ok); }
+.connection-notice { color: var(--hold); margin-top: 14px !important; font-size: 13px; }
+.connection-notice:empty { display: none; }
+a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 900px) { .connection-providers { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) {
+  main { padding: 14px 12px 50px; }
+  .bar { padding: 14px 12px; flex-wrap: wrap; }
+  .panel { padding: 16px 14px; }
+  .connection-intro { display: block; }
+  .connection-count { display: inline-block; margin-top: 12px; }
+  .connection-providers { grid-template-columns: 1fr; }
+  .connection-provider { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px 12px; }
+  .connection-provider button, .connection-provider-tag { grid-column: 2; }
+  .connection-dialog { max-width: calc(100vw - 32px); padding: 20px; }
+  .columns { grid-template-columns: minmax(0, 1fr); }
+}

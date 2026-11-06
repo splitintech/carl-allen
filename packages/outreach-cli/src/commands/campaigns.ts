@@ -1,11 +1,14 @@
 import { readFileSync } from 'node:fs';
 import {
+  activateContentCampaign,
   campaignStatus,
   commitActivation,
   createCampaign,
+  createContentCampaign,
   decideApproval,
   listApprovals,
   listCampaigns,
+  listContentCalendar,
   listManualTasks,
   listReview,
   prepareActivation,
@@ -72,6 +75,42 @@ const kill = (engaged: boolean): Command => ({
 });
 
 export const campaignCommands: Command[] = [
+  {
+    name: 'calendar create',
+    usage: 'outreach calendar create <name> --calendar <file.yaml> --account <provider-account-id>',
+    summary: 'Create a draft content calendar (Buffer-style social.publish queue, ADR 0006).',
+    flags: { calendar: 'string', account: 'string' },
+    async run({ args, flags, out, runtime }) {
+      const rt = await runtime();
+      out.result(
+        createContentCampaign(rt.engine, rt.ctx(), {
+          name: arg(args, 0, 'name'),
+          calendar: readFileSync(required(flags, 'calendar'), 'utf8'),
+          providerAccountId: required(flags, 'account'),
+        }),
+      );
+    },
+  },
+  {
+    name: 'calendar activate',
+    usage: 'outreach calendar activate <campaign-id>',
+    summary: 'Materialize content posts onto scheduled_actions and activate the campaign.',
+    async run({ args, out, runtime }) {
+      const rt = await runtime();
+      out.result(activateContentCampaign(rt.engine, rt.ctx(), arg(args, 0, 'campaign-id')));
+    },
+  },
+  {
+    name: 'calendar list',
+    usage: 'outreach calendar list [--hours 168]',
+    summary: 'List upcoming content-calendar social.publish actions.',
+    flags: { hours: 'string' },
+    async run({ flags, out, runtime }) {
+      const rt = await runtime();
+      const hours = Number(flag(flags, 'hours') ?? 168);
+      out.result(listContentCalendar(rt.engine, rt.ctx(), hours));
+    },
+  },
   {
     name: 'campaign create',
     usage: 'outreach campaign create <name> --playbook <file.yaml> --account <provider-account-id>',

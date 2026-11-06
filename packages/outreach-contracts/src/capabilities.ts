@@ -9,9 +9,17 @@ export const PROVIDER_PURPOSES = [
   'automated_outreach',
   'marketing',
   'bulk',
+  /** Calendar posts via a capability-gated social browser (ADR 0006). */
+  'social_publishing',
+  /** Outreach DMs / connection notes via a capability-gated social browser (ADR 0006). */
+  'social_messaging',
 ] as const;
 
 export type ProviderPurpose = (typeof PROVIDER_PURPOSES)[number];
+
+/** Where social browser actions may run. Only `daytona-browser` is allowed for automation. */
+export const EXECUTION_PLACEMENTS = ['daytona-browser'] as const;
+export type ExecutionPlacement = (typeof EXECUTION_PLACEMENTS)[number];
 
 export interface CapabilitySnapshot {
   readonly provider: string;
@@ -26,6 +34,17 @@ export interface CapabilitySnapshot {
   readonly reconcileBySentSearch: boolean;
   readonly maxRecipientsPerMessage: number;
   readonly discoveredAt: number;
+  /** Social calendar posts (ADR 0006). Absent means unsupported. */
+  readonly socialPublish?: boolean;
+  /** Social DMs / connection notes (ADR 0006). Absent means unsupported. */
+  readonly socialMessage?: boolean;
+  readonly socialConnect?: boolean;
+  readonly socialMediaTypes?: readonly ('image' | 'video')[];
+  readonly socialChannels?: readonly string[];
+  readonly browserTasks?: boolean;
+  readonly browserRecipeHashes?: Readonly<Record<string, string>>;
+  /** Required `daytona-browser` when any social capability is true (ADR 0006). */
+  readonly executionPlacement?: ExecutionPlacement;
 }
 
 export function isProviderPurpose(value: unknown): value is ProviderPurpose {

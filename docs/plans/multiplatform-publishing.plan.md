@@ -1,0 +1,12 @@
+# Four-platform publishing workspace
+
+User requests the entire UI/UX to schedule LinkedIn, X, Instagram and TikTok posts and upload images/videos. Preserve the single dynamic page direction and existing approvals, runtime ownership, credentials and dirty checkout work.
+
+1. Build a coherent Publishing Studio page: overview/calendar/queue, four-platform account selection, composer with per-platform captions and previews, image/video drop zone and library, reorder/remove media, draft save/resume, timezone-aware schedule, review/approval, delivery state, edit/cancel, retry/reconnect guidance and responsive keyboard-accessible layouts. Keep existing outreach console capabilities reachable. Produce a self-contained HTML build artifact from maintainable local modules, without embedded credentials or fictional data in connected mode.
+2. Add durable backend workspace and authenticated chunked image/video upload. Store bytes privately in the runtime filesystem with metadata scoped to workspace; validate names/types/signatures/size, hash completed content, protect reads/deletes and preserve referenced assets. Save content before approval, freeze actual media identity in action hashes, and avoid silently omitting failed uploads. No local file/object URL should become a scheduled remote asset.
+3. Implement capability-driven publishing integration. Add supported browser publishing drivers and identity bindings for X, Instagram and TikTok where reliable bounded flow/receipt checks can be implemented; extend LinkedIn for stored media/video. UI exposes actual adapter/channel capability and never claims live delivery from a fixture or merely a scheduled local draft. Unsupported media/actions remain explicit, editable blocked drafts/manual fallback rather than false scheduled/published success.
+4. Reuse engine action leases, exact-hash approvals, caps/windows and uncertainty after final effect. Account identities must match before publication; all Chrome remains in Daytona. No real posting, user cookie transfer or revised source upload is authorized by this UI task alone.
+5. Validate meaningful media/auth/workspace/approval/unsupported cases and real Chromium end-to-end composer/media/queue/browser workflows using disposable fixtures. Check build/types/lint/boundaries/secrets/line limits. Save screenshots, self-contained HTML, Papr bundle, requirement-level handoff and exact local-versus-deployed status in notes/live.
+
+
+Delivery evidence must distinguish local source/tests, cloud deployment and signed-in account acceptance.

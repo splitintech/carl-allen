@@ -1,0 +1,50 @@
+{
+  "name": "@splitin/outreach-provider-social-browser",
+  "version": "0.0.0",
+  "description": "Playwright Chrome social adapter for Daytona placement (LinkedIn publish/message). ADR 0006.",
+  "license": "MIT",
+  "author": "SplitInTech",
+  "homepage": "https://github.com/splitintech/outreach-engine/tree/main/packages/outreach-provider-social-browser#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/splitintech/outreach-engine.git",
+    "directory": "packages/outreach-provider-social-browser"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@splitin/outreach-contracts": "0.0.0",
+    "playwright": "1.65.0"
+  },
+  "devDependencies": {
+    "@splitin/outreach-fakes": "0.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/splitintech/outreach-engine/issues"
+  }
+}

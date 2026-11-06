@@ -1,3 +1,4 @@
+import { DraftMutationRefusedError } from '@splitin/outreach-contracts';
 import { ConflictError, ForbiddenError, NotFoundError, PlaybookError, ReviewStateError, TemplateRenderError } from '@splitin/outreach-core';
 import { ImportRejectedError, ImportStaleError, ProfileError } from '@splitin/outreach-import';
 import { ZodError } from 'zod';
@@ -15,6 +16,7 @@ export function toApiError(error: unknown): ApiError {
     return { status: 400, code: 'invalid_request', message: 'request body is invalid', issues: error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`) };
   }
   if (error instanceof SyntaxError) return { status: 400, code: 'invalid_json', message: 'request body is not valid JSON' };
+  if (error instanceof DraftMutationRefusedError) return { status: 409, code: 'draft_mutation_refused', message: error.message };
   if (error instanceof ForbiddenError) return { status: 403, code: 'forbidden', message: error.message };
   if (error instanceof NotFoundError) return { status: 404, code: 'not_found', message: error.message };
   if (error instanceof ConflictError || error instanceof ImportStaleError || error instanceof ReviewStateError) {

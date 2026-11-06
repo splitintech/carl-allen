@@ -2,6 +2,7 @@
 // Maps a FIXED set of action names to FIXED engine API routes. It never forwards arbitrary paths or
 // methods, and the API token stays server-side (declared as a manifest key, never sent to the browser).
 
+import { readFileSync, lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const ID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
@@ -22,17 +23,33 @@ function optional(params, name, max = 500) {
   return value;
 }
 
+// Re-read a rotated connection file for each request; credentials never enter frontend responses.
+function connection() {
+  let saved = {};
+  if (process.env.OUTREACH_CONNECTION_FILE) {
+    const stat = lstatSync(process.env.OUTREACH_CONNECTION_FILE);
+    if (!stat.isFile() || (process.platform !== 'win32' && (stat.mode & 0o077))) throw new BadInput('Connection file must be a regular owner-only file (chmod 600)');
+    try { saved = JSON.parse(readFileSync(process.env.OUTREACH_CONNECTION_FILE, 'utf8')); } catch { throw new BadInput('Cannot parse the private connection file; refresh it with the runtime connection command'); }
+    if (saved.apiTokenExpiresAt && Date.now() >= (typeof saved.apiTokenExpiresAt === 'number' ? saved.apiTokenExpiresAt : Date.parse(saved.apiTokenExpiresAt))) throw new BadInput('Daytona connection expired; renew it with the runtime connection command');
+  }
+  return { apiUrl: saved.apiUrl || process.env.OUTREACH_API_URL, apiToken: saved.apiToken || process.env.OUTREACH_API_TOKEN, previewToken: saved.previewToken || process.env.OUTREACH_PREVIEW_TOKEN, liveViewUrl: saved.liveViewUrl || process.env.OUTREACH_DAYTONA_LIVE_VIEW_URL };
+}
+
 async function api(method, path, body) {
-  const base = (process.env.OUTREACH_API_URL ?? '').replace(/\/+$/, '');
-  const token = process.env.OUTREACH_API_TOKEN ?? '';
-  if (!base || !token) throw new BadInput('OUTREACH_API_URL and OUTREACH_API_TOKEN must be set in Settings → Integration Keys');
-  const url = new URL(path, `${base}/`);
-  if (!['http:', 'https:'].includes(url.protocol)) throw new BadInput('OUTREACH_API_URL must be http(s)');
+  const settings = connection();
+  if (!settings.apiUrl || !settings.apiToken) throw new BadInput('OUTREACH_API_URL and OUTREACH_API_TOKEN must be set, or set OUTREACH_CONNECTION_FILE');
+  const base = new URL(settings.apiUrl);
+  if (base.username || base.password) throw new BadInput('Engine base URLs cannot contain embedded credentials');
+  if (!['http:', 'https:'].includes(base.protocol) || (base.protocol !== 'https:' && !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname))) throw new BadInput('Remote engine connections require HTTPS');
+  const url = new URL(path, `${base.origin}${base.pathname.replace(/\/+$/, '')}/`);
+  // Preserve signed-preview query credentials as well as route query parameters.
+  for (const [key, value] of base.searchParams) if (!url.searchParams.has(key)) url.searchParams.set(key, value);
   const res = await fetch(url, {
     method,
-    headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { authorization: `Bearer ${settings.apiToken}`, ...(settings.previewToken ? { 'x-daytona-preview-token': settings.previewToken } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(60_000),
+    redirect: 'error',
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -44,19 +61,70 @@ async function api(method, path, body) {
   return data;
 }
 
+function object(params, key) {
+  const value = params[key];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new BadInput(`invalid ${key}`);
+  return value;
+}
+
 const ACTIONS = {
+  'publishing-overview': async () => ({ ...await api('GET', 'v1/publishing'), liveViewUrl: connection().liveViewUrl || null }),
+  'publishing-draft-save': (p) => api('POST', 'v1/publishing/drafts', object(p, 'input')),
+  'publishing-draft-delete': (p) => api('DELETE', `v1/publishing/drafts/${need(p, 'draftId', ID)}`),
+  'publishing-submit': (p) => api('POST', `v1/publishing/drafts/${need(p, 'draftId', ID)}/submit`),
+  'publishing-upload-start': (p) => api('POST', 'v1/publishing/uploads', object(p, 'input')),
+  'publishing-upload-chunk': (p) => api('POST', `v1/publishing/uploads/${need(p, 'uploadId', ID)}/chunks`, { index: p.index, data: p.data }),
+  'publishing-upload-complete': (p) => api('POST', `v1/publishing/uploads/${need(p, 'uploadId', ID)}/complete`),
+  'publishing-upload-cancel': (p) => api('DELETE', `v1/publishing/uploads/${need(p, 'uploadId', ID)}`),
+  'publishing-media-read': (p) => api('GET', `v1/publishing/media/${need(p, 'assetId', ID)}?offset=${encodeURIComponent(p.offset ?? 0)}&length=${encodeURIComponent(p.length ?? 65536)}`),
+  'publishing-media-delete': (p) => api('DELETE', `v1/publishing/media/${need(p, 'assetId', ID)}`),
   async overview() {
-    const [campaigns, approvals, review, tasks, upcoming] = await Promise.all([
+    const [campaigns, approvals, review, tasks, upcoming, calendar, social, content, accounts] = await Promise.all([
       api('GET', 'v1/campaigns'),
       api('GET', 'v1/approvals'),
       api('GET', 'v1/review'),
       api('GET', 'v1/tasks'),
       api('GET', 'v1/actions/upcoming?hours=24'),
+      api('GET', 'v1/content-calendar?hours=168'),
+      api('GET', 'v1/social/status'),
+      api('GET', 'v1/content-campaigns'),
+      api('GET', 'v1/accounts'),
     ]);
     const live = campaigns.campaigns.filter((c) => c.status === 'active' || c.status === 'paused').slice(0, 20);
     const statuses = await Promise.all(live.map((c) => api('GET', `v1/campaigns/${encodeURIComponent(c.id)}`)));
-    return { campaigns: campaigns.campaigns, statuses, approvals: approvals.approvals, review: review.actions, tasks: tasks.tasks, upcoming: upcoming.actions };
+    return {
+      campaigns: campaigns.campaigns,
+      statuses,
+      approvals: approvals.approvals,
+      review: review.actions,
+      tasks: tasks.tasks,
+      upcoming: upcoming.actions,
+      calendar: calendar.posts,
+      content: content.campaigns,
+      accounts: accounts.accounts,
+      // Prefer the Mac-side live-view key when set; else the Daytona engine's env.
+      social: {
+        ...social,
+        liveViewUrl: connection().liveViewUrl || social.liveViewUrl || null,
+      },
+    };
   },
+  'content-compose': (p) => api('POST', 'v1/content-compose', object(p, 'input')),
+  'content-create': (p) => api('POST', 'v1/content-campaigns', object(p, 'input')),
+  'content-update': (p) => api('PATCH', `v1/content-campaigns/${need(p, 'campaignId', ID)}`, object(p, 'input')),
+  'content-delete': (p) => api('DELETE', `v1/content-campaigns/${need(p, 'campaignId', ID)}`),
+  'content-activate': (p) => api('POST', `v1/content-campaigns/${need(p, 'campaignId', ID)}/activate`),
+  'action-update': (p) => api('PATCH', `v1/actions/${need(p, 'actionId', ID)}`, object(p, 'input')),
+  'action-cancel': (p) => api('POST', `v1/actions/${need(p, 'actionId', ID)}/cancel`, { reason: need(p, 'reason') }),
+  'action-manual': (p) => api('POST', `v1/actions/${need(p, 'actionId', ID)}/manual`, { reason: need(p, 'reason') }),
+  'action-schedule': (p) => api('POST', 'v1/actions', object(p, 'input')),
+  'account-register': (p) => api('POST', 'v1/accounts', object(p, 'input')),
+  'account-check': (p) => api('POST', `v1/accounts/${need(p, 'accountId', ID)}/check`),
+  'account-reconnect': (p) => api('POST', `v1/accounts/${need(p, 'accountId', ID)}/reconnect`),
+  'drafts-list': (p) => api('GET', `v1/accounts/${need(p, 'accountId', ID)}/drafts`),
+  'drafts-get': (p) => api('GET', `v1/accounts/${need(p, 'accountId', ID)}/drafts/${encodeURIComponent(need(p, 'draftId'))}`),
+  'drafts-save': (p) => api('POST', `v1/accounts/${need(p, 'accountId', ID)}/drafts`, object(p, 'input')),
+  'drafts-delete': (p) => api('DELETE', `v1/accounts/${need(p, 'accountId', ID)}/drafts/${encodeURIComponent(need(p, 'draftId'))}`),
   'approval-decide': (p) =>
     api('POST', `v1/approvals/${need(p, 'approvalId', ID)}/decide`, {
       decision: need(p, 'decision', /^(approved|rejected)$/),

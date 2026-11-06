@@ -6,15 +6,16 @@
   "createdAt": "2026-09-28T00:00:00.000Z",
   "createdBy": "SplitInTech",
   "minPaprworkVersion": "2.6.0",
-  "description": "Operator console for the MIT outreach engine: what goes out next, approvals, review, manual tasks and kill switches. The engine runs outside Papr's databases (ADR 0004).",
+  "description": "Private publishing workspace for LinkedIn, X, Instagram and TikTok: durable media uploads, per-platform drafts, calendar, scheduling and approvals; outreach messaging and email tools remain available.",
   "requirements": [
     {
       "name": "OUTREACH_API_URL",
       "service": "outreach-engine",
       "category": "other",
-      "description": "Loopback URL of `outreach serve`, e.g. http://127.0.0.1:8787",
+      "description": "Engine API base URL: local loopback (http://127.0.0.1:8787) or private Daytona preview HTTPS URL.",
       "credentialScope": "user",
-      "clientAccess": "server"
+      "clientAccess": "server",
+      "optional": true
     },
     {
       "name": "OUTREACH_API_TOKEN",
@@ -22,7 +23,35 @@
       "category": "other",
       "description": "Token from `outreach token create <principal> --role approver` (viewer for read-only).",
       "credentialScope": "user",
-      "clientAccess": "server"
+      "clientAccess": "server",
+      "optional": true
+    },
+    {
+      "name": "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+      "service": "outreach-engine",
+      "category": "other",
+      "description": "Optional Daytona Chrome live-view / VNC URL for social reconnect (ADR 0006).",
+      "credentialScope": "user",
+      "clientAccess": "server",
+      "optional": true
+    },
+    {
+      "name": "OUTREACH_PREVIEW_TOKEN",
+      "service": "outreach-engine",
+      "category": "other",
+      "description": "Daytona private preview token. Separate from engine API token; kept server-side.",
+      "credentialScope": "user",
+      "clientAccess": "server",
+      "optional": true
+    },
+    {
+      "name": "OUTREACH_CONNECTION_FILE",
+      "service": "outreach-engine",
+      "category": "other",
+      "description": "Absolute owner-only connection JSON file. Read on every action so runtime renewals take effect.",
+      "credentialScope": "user",
+      "clientAccess": "server",
+      "optional": true
     }
   ],
   "platform": [
@@ -34,9 +63,9 @@
     "id": "outreach-console",
     "name": "Outreach Console",
     "version": "0.1.0",
-    "entryFile": "index.html",
+    "entryFile": "publishing.html",
     "appPath": "apps/outreach-console",
-    "description": "What leaves the building next, and the one control that stops it."
+    "description": "Compose, upload, preview, schedule and approve posts across four platforms."
   },
   "jobs": [
     {
