@@ -1,3 +1,4 @@
+import { outlookDrafts } from './drafts';
 import { TokenError, type AccessTokenSource, type AccountPort, type ProviderAdapter, type ProviderPurpose } from '@splitin/outreach-contracts';
 import { ProviderNetworkError } from '@splitin/outreach-provider-kit';
 import { GRAPH_API, graphGet, type HttpDeps } from './graph';
@@ -83,6 +84,7 @@ export function outlookAdapter(options: OutlookAdapterOptions = {}): ProviderAda
     name: 'outlook',
     purposes: options.purposes ?? ['manual_correspondence'],
     account,
+    drafts: outlookDrafts(http, tokens),
     email: outlookSender({ http, tokens, settleMs: options.settleMs ?? 180_000 }),
     mailbox: outlookMailbox({ http, tokens, ...(options.pollBudget ? { budget: options.pollBudget } : {}) }),
   };

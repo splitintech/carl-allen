@@ -62,3 +62,7 @@ gmailAdapter({ tokens: { get: async (ctx) => host.tokenFor(ctx.account.externalA
 ## Testing
 
 `FakeGmailServer` in `@splitin/outreach-fakes` speaks the parts of the Gmail API and Google's OAuth endpoints this adapter uses, over real HTTP. It can drop connections before or after accepting a send, rewrite Message-IDs, lag its search index and expire history cursors. The adapter passes the email conformance kit against it. `outreach-e2e/src/gmail.e2e.test.ts` runs the engine end to end through it.
+
+## Mailbox drafts
+
+The optional `drafts` port supports list/get/save/delete through Gmail draft endpoints; it never sends. Saves require a recipient and valid MIME. OAuth grants must include `https://www.googleapis.com/auth/gmail.compose`; reconnect older grants to grant it. Saving a supported existing draft uses the draft ID and Gmail's PUT endpoint, preserving reply-to and threading headers. Drafts with attachments or CC/BCC recipients are refused before mutation so a text-only edit cannot silently discard them; use Gmail to edit those drafts. Reference: https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.drafts .

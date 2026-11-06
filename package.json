@@ -27,7 +27,11 @@
     "release:verify": "node scripts/verify-release.mjs",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "check:packed": "node scripts/check-packed.mjs",
-    "check:migration": "python3 scripts/check-migration.py"
+    "check:migration": "python3 scripts/check-migration.py",
+    "test:runtime": "node --test deploy/daytona/runtime-files.test.mjs && python3 -m unittest discover -s deploy/daytona/tests -v",
+    "test:browser": "node scripts/browser-fixtures.mjs",
+    "studio:build": "node scripts/build-publishing.mjs",
+    "studio": "node scripts/publishing-preview.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -37,7 +41,8 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.70.1",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "esbuild": "0.27.7"
   },
   "overrides": {
     "exceljs": {

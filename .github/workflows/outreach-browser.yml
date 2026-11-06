@@ -1,0 +1,27 @@
+name: outreach-browser-and-runtime
+on:
+  push:
+    paths: ['packages/**', 'apps/papr/**', 'deploy/daytona/**', 'package*.json', '.github/workflows/outreach-browser.yml']
+  pull_request:
+    paths: ['packages/**', 'apps/papr/**', 'deploy/daytona/**', 'package*.json', '.github/workflows/outreach-browser.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm run test:runtime
+      - run: npm run test:browser
+        env:
+          OUTREACH_BROWSER_FIXTURES: '1'
+          TMPDIR: /tmp

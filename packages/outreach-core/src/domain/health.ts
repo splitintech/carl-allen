@@ -94,7 +94,7 @@ export async function checkAccountHealth(env: DomainEnv, accountId: string): Pro
     const answer = await adapter.account.health(providerContext(env.exec, account, ulid(), AbortSignal.timeout(CHECK_TIMEOUT_MS)));
     observed = { status: answer.status, affirmative: true, ...(answer.detail ? { detail: answer.detail } : {}) };
   } catch (error) {
-    observed = { status: 'degraded', affirmative: false, detail: `health check failed: ${(error as Error).message}` };
+    observed = { status: adapter.social || adapter.browser ? 'reauth_required' : 'degraded', affirmative: !!(adapter.social || adapter.browser), detail: `health check failed: ${(error as Error).message}` };
   }
   return recordAccountHealth(env.db, accountId, observed, env.now());
 }

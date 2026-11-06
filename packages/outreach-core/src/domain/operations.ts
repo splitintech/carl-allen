@@ -29,6 +29,8 @@ export interface RegisterAccountInput {
   readonly purposes: ProviderPurpose[];
   readonly secretRef: string;
   readonly webhookSecretRef?: string;
+  /** Required `daytona-browser` for social.publish / social.message (ADR 0006). */
+  readonly executionPlacement?: 'daytona-browser';
 }
 
 /** Registers a sending account and records the adapter's capability snapshot. Secrets are references only. */
@@ -52,7 +54,11 @@ export async function registerProviderAccount(env: DomainEnv, ctx: AuthContext, 
     webhook_secret_ref: input.webhookSecretRef ?? null,
     health: 'ok',
   };
-  const capabilities = await adapter.account.discover(providerContext(env.exec, row, ctx.traceId, AbortSignal.timeout(30_000)));
+  const discovered = await adapter.account.discover(providerContext(env.exec, row, ctx.traceId, AbortSignal.timeout(30_000)));
+  const capabilities = {
+    ...discovered,
+    ...(input.executionPlacement ? { executionPlacement: input.executionPlacement } : {}),
+  };
   env.db.transaction(() => {
     const now = env.now();
     env.db.prepare(
@@ -182,3 +188,22 @@ export function recordManualOutcome(env: DomainEnv, ctx: AuthContext, taskId: st
   });
 }
 
+/** Refresh discovered support/recipe definitions without changing account placement or attested purposes. */
+export async function refreshAccountCapabilities(env: DomainEnv, ctx: AuthContext, accountId: string): Promise<import('@splitin/outreach-contracts').CapabilitySnapshot> {
+  requireRole(ctx, 'operator');
+  const account = env.db.prepare('SELECT * FROM provider_accounts WHERE workspace_id = ? AND id = ?').get<AccountRow>(ctx.workspaceId, accountId);
+  if (!account) throw new NotFoundError('provider account');
+  const adapter = env.adapters.get(account.provider);
+  if (!adapter) throw new NotFoundError('provider adapter');
+  const discovered = await adapter.account.discover(providerContext(env.exec, account, ctx.traceId, AbortSignal.timeout(30_000)));
+  if (discovered.provider !== account.provider) throw new ConflictError('provider discovery identity mismatch');
+  return env.db.transaction(() => {
+    const current = env.db.prepare('SELECT capabilities FROM provider_accounts WHERE workspace_id = ? AND id = ?').get<{ capabilities: string }>(ctx.workspaceId, accountId);
+    if (!current) throw new NotFoundError('provider account');
+    const stored = JSON.parse(current.capabilities) as import('@splitin/outreach-contracts').CapabilitySnapshot;
+    const capabilities = { ...discovered, executionPlacement: stored.executionPlacement };
+    env.db.prepare('UPDATE provider_accounts SET capabilities = ? WHERE workspace_id = ? AND id = ?').run(JSON.stringify(capabilities), ctx.workspaceId, accountId);
+    audit(env.db, ctx, env.now(), 'provider_account', accountId, 'capabilities_refreshed', { provider: account.provider, recipeIds: Object.keys(capabilities.browserRecipeHashes ?? {}) });
+    return capabilities;
+  });
+}

@@ -1,4 +1,11 @@
-import { FAKE_EMAIL_SECRET, FakeEmailProvider, FakeNotifier, staticSecrets } from '@splitin/outreach-fakes';
+import {
+  FAKE_EMAIL_SECRET,
+  FAKE_SOCIAL_SECRET,
+  FakeEmailProvider,
+  FakeNotifier,
+  FakeSocialProvider,
+  staticSecrets,
+} from '@splitin/outreach-fakes';
 import { openSqliteDatabase } from '@splitin/outreach-store-sqlite';
 import { DateTime } from 'luxon';
 import { bootstrapWorkspace, createEngine, type Engine } from '../engine';
@@ -15,6 +22,7 @@ export interface DomainTestEnv {
   readonly engine: Engine;
   readonly fake: FakeEmailProvider;
   readonly notifier: FakeNotifier;
+  readonly social: FakeSocialProvider;
   readonly admin: AuthContext;
   readonly operator: AuthContext;
   readonly approver: AuthContext;
@@ -52,11 +60,16 @@ export async function makeDomainEnv(options: { sendGate?: SendGate; start?: numb
   const db = openSqliteDatabase(':memory:');
   const fake = new FakeEmailProvider();
   const notifier = new FakeNotifier();
+  const social = new FakeSocialProvider();
   let now = options.start ?? TUESDAY_9AM_NY;
   const engine = createEngine({
     db,
-    adapters: [fake.adapter(), notifier.adapter()],
-    secrets: staticSecrets({ 'env:FAKE_EMAIL': FAKE_EMAIL_SECRET, 'env:FAKE_WEBHOOK': 'fake-webhook-secret-value' }),
+    adapters: [fake.adapter(), notifier.adapter(), social.adapter()],
+    secrets: staticSecrets({
+      'env:FAKE_EMAIL': FAKE_EMAIL_SECRET,
+      'env:FAKE_WEBHOOK': 'fake-webhook-secret-value',
+      'env:FAKE_SOCIAL': FAKE_SOCIAL_SECRET,
+    }),
     workerId: 'worker-1',
     sendGate: options.sendGate ?? { mode: 'open' },
     unsubscribe: options.unsubscribe ?? { baseUrl: 'https://outreach.example.com/u/', secret: 'unsubscribe-test-secret-fixture' },
@@ -90,6 +103,7 @@ export async function makeDomainEnv(options: { sendGate?: SendGate; start?: numb
     engine,
     fake,
     notifier,
+    social,
     admin,
     operator,
     approver,

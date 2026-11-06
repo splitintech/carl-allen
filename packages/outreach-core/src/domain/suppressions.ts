@@ -30,19 +30,19 @@ export function addSuppression(db: SqlDatabase, input: SuppressionInput, now: nu
 }
 
 /** Checks every scope that can cover an email recipient: global, email channel, sending account and domain. */
-export function isSuppressed(db: SqlDatabase, workspaceId: string, recipient: string, providerAccountId: string | null): string | null {
+export function isSuppressed(db: SqlDatabase, workspaceId: string, recipient: string, providerAccountId: string | null, channel = 'email'): string | null {
   const value = normalizeEmail(recipient);
   const domain = value.split('@')[1] ?? '';
   const row = db
     .prepare(
       `SELECT scope, reason FROM suppressions WHERE workspace_id = ? AND (
          (scope = 'global' AND value_norm = ?) OR
-         (scope = 'channel' AND channel IN ('email','*') AND value_norm = ?) OR
+         (scope = 'channel' AND channel IN (?,'*') AND value_norm = ?) OR
          (scope = 'provider_account' AND channel = ? AND value_norm = ?) OR
          (scope = 'domain' AND value_norm = ?)
        ) LIMIT 1`,
     )
-    .get<{ scope: string; reason: string }>(workspaceId, value, value, providerAccountId ?? '', value, domain);
+    .get<{ scope: string; reason: string }>(workspaceId, value, channel, value, providerAccountId ?? '', value, domain);
   if (row) return `${row.scope}:${row.reason}`;
   const fingerprint = db.prepare("SELECT reason FROM suppression_fingerprints WHERE workspace_id = ? AND scheme = 'sha256-email-v1' AND digest = ?")
     .get<{ reason: string }>(workspaceId, sha256Hex(value));

@@ -40,7 +40,7 @@ export function parseRetryAfter(header: string | null, now = Date.now()): number
 
 export interface JsonRequest {
   readonly url: URL | string;
-  readonly method: 'GET' | 'POST' | 'DELETE' | 'PATCH';
+  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   readonly token?: string;
   readonly signal: AbortSignal;
   /** Serialized as JSON. */

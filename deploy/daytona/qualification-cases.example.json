@@ -1,0 +1,7 @@
+{
+  "actions": [
+    { "actionId": "REPLACE_WITH_APPROVED_POST_ACTION_ID", "kind": "social.publish", "accountId": "REPLACE_WITH_LINKEDIN_ACCOUNT_ID" },
+    { "actionId": "REPLACE_WITH_APPROVED_MESSAGE_ACTION_ID", "kind": "social.message", "accountId": "REPLACE_WITH_LINKEDIN_ACCOUNT_ID" },
+    { "actionId": "REPLACE_WITH_APPROVED_INVITATION_ACTION_ID", "kind": "social.connect", "accountId": "REPLACE_WITH_LINKEDIN_ACCOUNT_ID" }
+  ]
+}

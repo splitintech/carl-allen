@@ -1,11 +1,12 @@
 import type { CapabilitySnapshot, SenderIdentity, SqlDatabase } from '@splitin/outreach-contracts';
 import { enqueueAction } from '../execution/enqueue';
 import type { Actor } from '../execution/actions-repo';
-import type { EmailPayload, ManualPayload } from '../execution/invoke';
+import type { EmailPayload, ManualPayload, SocialMessagePayload, SocialPublishPayload } from '../execution/invoke';
 import { addDuration, nextSlot, resolveZone, durationMs } from './calendar';
 import { loadCampaign, loadEnrollment, loadVersion, type CampaignRow, type CampaignVersionRow, type DomainEnv, type EnrollmentRow } from './env';
 import type { Policy, Step } from './playbook';
 import { createUnsubscribeToken, stopEnrollment } from './suppressions';
+import { accountRecipeHash } from './compile';
 import { ForbiddenError } from './auth';
 import { TemplateRenderError, escapeHtml, findTemplate, render } from './templates';
 
@@ -101,7 +102,8 @@ function footer(sc: StepContext, sender: SenderIdentity, unsubscribeUrl: string 
   return lines;
 }
 
-function buildEmail(env: DomainEnv, sc: StepContext, step: Extract<Step, { type: 'email.send' | 'email.reply' }>, contact: ContactView): EmailPayload {
+function buildEmail(env: DomainEnv, original: StepContext, step: Extract<Step, { type: 'email.send' | 'email.reply' }>, contact: ContactView): EmailPayload {
+  const sc = { ...original, version: { ...original.version, provider_account_id: step.providerAccountId ?? original.version.provider_account_id } };
   const { db } = env;
   const template = findTemplate(db, sc.campaign.workspace_id, step.template);
   if (!template) throw new TemplateRenderError([`template:${step.template}`]);
@@ -146,10 +148,10 @@ function buildEmail(env: DomainEnv, sc: StepContext, step: Extract<Step, { type:
   };
 }
 
-function renderManual(env: DomainEnv, sc: StepContext, ref: string, contact: ContactView): string {
+function renderManual(env: DomainEnv, sc: StepContext, ref: string, contact: ContactView, accountId = sc.version.provider_account_id): string {
   const template = findTemplate(env.db, sc.campaign.workspace_id, ref);
   if (!template) throw new TemplateRenderError([`template:${ref}`]);
-  return render(template.body_text, tokenValues(env, sc, contact, senderOf(env.db, sc.version.provider_account_id).sender), 'text');
+  return render(template.body_text, tokenValues(env, sc, contact, senderOf(env.db, accountId).sender), 'text');
 }
 
 export interface MaterializeOptions {
@@ -187,17 +189,36 @@ export function materializeNext(
     }
     const dueAt = nextSlot(Math.max(due, now), window, zone);
     try {
-      const payload: EmailPayload | ManualPayload =
-        step.type === 'manual.task'
-          ? {
-              channel: step.channel,
-              draft: renderManual(env, sc, step.template, contact),
-              ...(contact.profile_url ? { targetUrl: contact.profile_url } : {}),
-            }
-          : buildEmail(env, sc, step, contact);
-      const isEmail = step.type !== 'manual.task';
-      const collectForBatch = isEmail && !!options.batch && options.batch.ids.length < options.batch.size;
-      const perAction = isEmail && (sc.policy.approval === 'every_action' || step.approval === 'always') && !collectForBatch;
+      const boundAccountId = 'providerAccountId' in step ? step.providerAccountId ?? sc.version.provider_account_id : sc.version.provider_account_id;
+      let payload: EmailPayload | ManualPayload | SocialMessagePayload | SocialPublishPayload | {recipeId:string;recipeHash:string;input:Record<string,unknown>};
+      if (step.type === 'manual.task') {
+        payload = {
+          channel: step.channel,
+          draft: renderManual(env, sc, step.template, contact, boundAccountId),
+          ...(contact.profile_url ? { targetUrl: contact.profile_url } : {}),
+        };
+      } else if (step.type === 'browser.task') {
+        const recipeHash = accountRecipeHash(env,sc.enrollment.workspace_id,boundAccountId,step.recipeId);
+        if(!recipeHash)throw new TemplateRenderError(['recipe_definition_hash']);
+        payload = { recipeId: step.recipeId, recipeHash, input: step.input };
+      } else if (step.type === 'social.message' || step.type === 'social.connect') {
+        if (!contact.profile_url) throw new TemplateRenderError(['profile_url']);
+        payload = {
+          channel: step.channel,
+          targetUrl: contact.profile_url,
+          text: renderManual(env, sc, step.template, contact, boundAccountId),
+        };
+      } else if (step.type === 'social.publish') {
+        payload = { channel: step.channel, text: renderManual(env, sc, step.template, contact, boundAccountId), ...(step.mediaUrls ? {mediaUrls:step.mediaUrls} : {}) };
+      } else {
+        payload = buildEmail(env, sc, step, contact);
+      }
+      const isEmail = step.type === 'email.send' || step.type === 'email.reply';
+      const isSocial = step.type.startsWith('social.');
+      const needsAccount = isEmail || isSocial || step.type === 'browser.task';
+      const approvalStep = 'approval' in step ? step.approval : 'inherit';
+      const collectForBatch = needsAccount && !!options.batch && options.batch.ids.length < options.batch.size;
+      const perAction = needsAccount && (sc.policy.approval === 'every_action' || approvalStep === 'always') && !collectForBatch;
       const { action } = enqueueAction(
         db,
         {
@@ -207,16 +228,20 @@ export function materializeNext(
           idempotencyKey: `seq:${sc.enrollment.id}:${step.id}`,
           dueAt,
           notAfter: dueAt + durationMs(sc.policy.expireAfter),
-          providerAccountId: isEmail ? sc.version.provider_account_id : null,
-          purpose: sc.campaign.purpose,
-          recipient: isEmail ? contact.email : null,
+          providerAccountId: needsAccount ? boundAccountId : null,
+          purpose: isSocial
+            ? step.type === 'social.publish'
+              ? 'social_publishing'
+              : 'social_messaging'
+            : sc.campaign.purpose,
+          recipient: isEmail ? contact.email : isSocial ? contact.profile_url : null,
           enrollmentId: sc.enrollment.id,
           campaignId: sc.campaign.id,
           stepId: step.id,
           contactPointId: sc.enrollment.contact_point_id,
-          senderDomain: senderOf(db, sc.version.provider_account_id).sender.address.split('@')[1] ?? 'outreach.invalid',
+          senderDomain: senderOf(db, boundAccountId).sender.address.split('@')[1] ?? 'outreach.invalid',
           awaitingApproval: collectForBatch || perAction,
-          approvalId: isEmail && !collectForBatch && !perAction && sc.policy.approval !== 'none' ? sc.version.approval_id : null,
+          approvalId: needsAccount && !collectForBatch && !perAction && sc.policy.approval !== 'none' ? sc.version.approval_id : null,
         },
         actor,
         now,

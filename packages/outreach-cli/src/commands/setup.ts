@@ -1,14 +1,17 @@
+import { accountContext, registerConfiguredAccount } from '@splitin/outreach-server';
 import { PROVIDER_PURPOSES, verifyAuditChain, type ProviderPurpose } from '@splitin/outreach-contracts';
 import {
   ROLES,
   addPrincipal,
   bootstrapWorkspace,
   checkAccountHealth,
+  refreshAccountCapabilities,
   configureNotifications,
   createApiToken,
   JURISDICTION_RULES,
   readJurisdictionPolicy,
   readSendGate,
+  requireRole,
   registerProviderAccount,
   revokeApiToken,
   setJurisdictionPolicy,
@@ -108,13 +111,33 @@ export const setupCommands: Command[] = [
   },
   {
     name: 'account add',
-    usage: 'outreach account add --provider <adapter> --external-id <id> --sender-name <n> --sender-email <e> --purposes <p,...> --secret env:NAME|file:PATH [--org <o>] [--postal <address>] [--webhook-secret env:NAME]',
+    usage:
+      'outreach account add --provider <adapter> --external-id <id> --sender-name <n> --sender-email <e> --purposes <p,...> --secret env:NAME|file:PATH [--org <o>] [--postal <address>] [--webhook-secret env:NAME] [--execution-placement daytona-browser --profile-url <canonical-linkedin-url>]',
     summary: 'Register a provider account; purposes are what your contract with the provider allows.',
-    flags: { provider: 'string', 'external-id': 'string', 'sender-name': 'string', 'sender-email': 'string', purposes: 'string', secret: 'string', org: 'string', postal: 'string', 'webhook-secret': 'string' },
+    flags: {
+      provider: 'string',
+      'external-id': 'string',
+      'sender-name': 'string',
+      'sender-email': 'string',
+      purposes: 'string',
+      secret: 'string',
+      org: 'string',
+      postal: 'string',
+      'webhook-secret': 'string',
+      'execution-placement': 'string',
+      'profile-url': 'string',
+    },
     async run({ flags, out, runtime }) {
       const rt = await runtime();
-      const id = await registerProviderAccount(rt.engine, rt.ctx(), {
+      const placement = flag(flags, 'execution-placement');
+      if (placement && placement !== 'daytona-browser') {
+        throw new Error('execution-placement must be daytona-browser (ADR 0006)');
+      }
+      // Fake adapters have no real Chrome profile and must not mutate runtime binding files.
+      const register = rt.options.fake ? registerProviderAccount : registerConfiguredAccount;
+      const id = await register(rt.engine, rt.ctx(), {
         provider: required(flags, 'provider'),
+        ...(flag(flags, 'profile-url') ? { profileUrl: flag(flags, 'profile-url') as string } : {}),
         externalAccountId: required(flags, 'external-id'),
         sender: {
           name: required(flags, 'sender-name'),
@@ -125,6 +148,7 @@ export const setupCommands: Command[] = [
         purposes: parsePurposes(required(flags, 'purposes')),
         secretRef: required(flags, 'secret'),
         ...(flag(flags, 'webhook-secret') ? { webhookSecretRef: flag(flags, 'webhook-secret') as string } : {}),
+        ...(placement === 'daytona-browser' ? { executionPlacement: 'daytona-browser' as const } : {}),
       });
       out.result({ providerAccountId: id });
     },
@@ -135,7 +159,10 @@ export const setupCommands: Command[] = [
     summary: 'Ask the provider for the account health now (a revoked grant shows reauth_required).',
     async run({ args, out, runtime }) {
       const rt = await runtime();
-      rt.ctx();
+      const ctx = rt.ctx();
+      requireRole(ctx, 'operator');
+      accountContext(rt.engine, ctx, arg(args, 0, 'provider-account-id'));
+      await refreshAccountCapabilities(rt.engine, ctx, arg(args, 0, 'provider-account-id'));
       out.result(await checkAccountHealth(rt.engine, arg(args, 0, 'provider-account-id')));
     },
   },

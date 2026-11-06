@@ -36,9 +36,13 @@ spec:
     expect(error.issues.join('\n')).toMatch(/policy\.window\.start/);
   });
 
-  it('rejects social steps that are not manual tasks and unknown fields', () => {
+  it('rejects unknown social step types and unknown fields; accepts social.message', () => {
     expect(() => parsePlaybook(PLAYBOOK.replace('type: manual.task, channel: linkedin', 'type: linkedin.connect, channel: linkedin'))).toThrow(PlaybookError);
     expect(() => parsePlaybook(PLAYBOOK.replace('firstBatchSize: 2', 'firstBatchSize: 2\n    stealth: true'))).toThrow(PlaybookError);
+    const withSocial = parsePlaybook(
+      PLAYBOOK.replace('type: manual.task, channel: linkedin, template: social@1, when: no_reply', 'type: social.message, channel: linkedin, template: social@1, when: no_reply'),
+    );
+    expect(withSocial.spec.steps.some((step) => step.type === 'social.message')).toBe(true);
   });
 });
 

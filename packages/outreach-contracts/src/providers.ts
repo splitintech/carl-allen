@@ -198,6 +198,70 @@ export interface ManualTaskProvider {
   prepare(ctx: ProviderContext, input: ManualTaskInput): Promise<void>;
 }
 
+export interface SocialPublishInput {
+  readonly actionId: string;
+  readonly idempotencyKey: string;
+  readonly channel: string;
+  readonly text: string;
+  readonly mediaUrls?: readonly string[];
+}
+
+export interface SocialMessageInput {
+  readonly actionId: string;
+  readonly idempotencyKey: string;
+  readonly channel: string;
+  readonly targetUrl: string;
+  readonly text: string;
+}
+
+export interface SocialConnectInput {
+  readonly actionId: string;
+  readonly idempotencyKey: string;
+  readonly channel: string;
+  readonly targetUrl: string;
+  readonly text?: string;
+}
+
+export interface BrowserTaskInput {
+  readonly actionId: string;
+  readonly idempotencyKey: string;
+  readonly recipeId: string;
+  readonly recipeHash: string;
+  readonly input: Readonly<Record<string, unknown>>;
+}
+export interface BrowserTaskPort {
+  run(ctx: ProviderContext, input: BrowserTaskInput): Promise<SendResult>;
+}
+export interface MailDraft {
+  readonly id: string;
+  readonly content: EmailContent;
+  readonly updatedAt?: number;
+}
+export interface EmailDraftPort {
+  list(ctx: ProviderContext): Promise<readonly MailDraft[]>;
+  get(ctx: ProviderContext, id: string): Promise<MailDraft>;
+  save(ctx: ProviderContext, input: EmailContent & { readonly id?: string }): Promise<MailDraft>;
+  delete(ctx: ProviderContext, id: string): Promise<void>;
+}
+
+export interface SocialHealth {
+  readonly status: AccountHealth;
+  readonly detail?: string;
+  /** True when the operator must reopen Daytona live view and re-authenticate. */
+  readonly reconnectNeeded: boolean;
+}
+
+/**
+ * Browser-driven social actions (ADR 0006). Implemented only for `executionPlacement: daytona-browser`.
+ * Missing methods mean unsupported — never fall back to email or a local desktop Chrome session.
+ */
+export interface SocialBrowserPort {
+  connect?(ctx: ProviderContext, input: SocialConnectInput): Promise<SendResult>;
+  publish(ctx: ProviderContext, input: SocialPublishInput): Promise<SendResult>;
+  message(ctx: ProviderContext, input: SocialMessageInput): Promise<SendResult>;
+  health(ctx: ProviderContext): Promise<SocialHealth>;
+}
+
 /** Everything one provider integration offers. Missing ports mean "unsupported", never "fall back". */
 export interface ProviderAdapter {
   readonly name: string;
@@ -209,4 +273,12 @@ export interface ProviderAdapter {
   readonly webhook?: WebhookVerifier;
   readonly notify?: NotificationPublisher;
   readonly manual?: ManualTaskProvider;
+  readonly social?: SocialBrowserPort;
+  readonly browser?: BrowserTaskPort;
+  readonly drafts?: EmailDraftPort;
+}
+
+/** A mailbox draft mutation was refused before any change to preserve unsupported content. */
+export class DraftMutationRefusedError extends Error {
+  constructor(message: string) { super(message); this.name = 'DraftMutationRefusedError'; }
 }

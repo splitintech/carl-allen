@@ -50,3 +50,7 @@ Exchange Online allows 10,000 recipients a day and 30 messages a minute per mail
 ## Testing
 
 `FakeGraphServer` in `@splitin/outreach-fakes` speaks the parts of Graph and the Microsoft identity platform this adapter uses, over real HTTP. It supports drafts, send moving the message to Sent Items under a new id, OData filters and paging, raw MIME, authorization-code and refresh grants with rotation, and forced send outcomes. The adapter passes the email conformance kit against it. `outreach-e2e/src/outlook.e2e.test.ts` covers the engine end to end: a lost send, a reply, an NDR and token rotation.
+
+## Mailbox drafts
+
+The optional `drafts` port lists/gets/creates/updates/deletes mailbox drafts with existing Mail.ReadWrite consent. Existing messages must affirm `isDraft=true` before update or delete. No draft operation calls a send endpoint. Reference: https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0 .

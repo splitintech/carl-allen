@@ -64,7 +64,7 @@ function draftVersion(env: DomainEnv, campaignId: string): CampaignVersionRow {
 
 function candidates(env: DomainEnv, workspaceId: string, audience: Audience): MemberCandidate[] {
   const base = `SELECT c.id AS contact_id, cp.id AS contact_point_id, cp.value_norm AS email, cp.consent_basis, cp.jurisdiction
-    FROM contacts c JOIN contact_points cp ON cp.contact_id = c.id AND cp.kind = 'email'
+    FROM contacts c JOIN contact_points cp ON cp.contact_id = c.id AND cp.kind = '${audience.require.includes('email') ? 'email' : 'social_profile'}'
     WHERE c.workspace_id = ? AND c.merged_into_id IS NULL`;
   if (audience.source === 'all') return env.db.prepare(`${base} ORDER BY c.id`).all<MemberCandidate>(workspaceId);
   if ('importBatch' in audience.source) {

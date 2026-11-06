@@ -46,6 +46,8 @@ export interface CampaignRow {
   status: 'draft' | 'active' | 'paused' | 'completed' | 'archived';
   active_version_id: string | null;
   paused_reason: string | null;
+  /** `outreach` sequences vs Buffer-style `content` calendars (ADR 0006). */
+  campaign_kind?: 'outreach' | 'content';
 }
 
 export interface EnrollmentRow {

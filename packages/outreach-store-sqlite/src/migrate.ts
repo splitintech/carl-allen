@@ -1,4 +1,7 @@
+import { SCHEMA_0007 } from './schema-0007';
 import { SCHEMA_0004 } from './schema-0004';
+import { SCHEMA_0006 } from './schema-0006';
+import { SCHEMA_0005 } from './schema-0005';
 import { sha256Hex, type SqlDatabase } from '@splitin/outreach-contracts';
 import { SCHEMA_0001 } from './schema';
 import { SCHEMA_0002 } from './schema-0002';
@@ -14,6 +17,9 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: '0002_api_tokens', sql: SCHEMA_0002 },
   { id: '0003_prepared_operations', sql: SCHEMA_0003 },
   { id: '0004_maintenance', sql: SCHEMA_0004 },
+  { id: '0005_social_actions', sql: SCHEMA_0005 },
+  { id: '0006_browser_actions', sql: SCHEMA_0006 },
+  { id: '0007_publishing_workspace', sql: SCHEMA_0007 },
 ];
 
 export class MigrationDriftError extends Error {
@@ -41,14 +47,20 @@ export function migrate(db: SqlDatabase, migrations: readonly Migration[] = MIGR
       if (existing !== digest) throw new MigrationDriftError(migration.id);
       continue;
     }
-    db.transaction(() => {
+    // SQLite table rebuilds must disable FK enforcement outside the transaction;
+    // validate every reference before commit and restore enforcement on every exit.
+    const rebuild = migration.id === '0005_social_actions' || migration.id === '0006_browser_actions';
+    const foreignKeys = db.prepare('PRAGMA foreign_keys').get<{ foreign_keys: number }>()?.foreign_keys === 1;
+    if (rebuild && foreignKeys) db.exec('PRAGMA foreign_keys = OFF');
+    try { db.transaction(() => {
       db.exec(migration.sql);
+      if (rebuild && db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('migration foreign key validation failed');
       db.prepare('INSERT INTO schema_migrations (id, sha256, applied_at) VALUES (?,?,?)').run(
         migration.id,
         digest,
         now,
       );
-    });
+    }); } finally { if (rebuild && foreignKeys) db.exec('PRAGMA foreign_keys = ON'); }
     ran.push(migration.id);
   }
   return ran;

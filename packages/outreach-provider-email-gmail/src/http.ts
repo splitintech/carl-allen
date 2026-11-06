@@ -13,7 +13,7 @@ export async function gmailRequest(
   deps: HttpDeps,
   ctx: ProviderContext,
   token: string,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
   options: { query?: Record<string, string | readonly string[] | undefined>; json?: unknown } = {},
 ): Promise<GmailResponse> {

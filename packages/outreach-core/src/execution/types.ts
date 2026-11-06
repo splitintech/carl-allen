@@ -120,6 +120,8 @@ export interface ExecutionConfig {
   readonly claimLeaseMs: number;
   readonly executeLeaseMs: number;
   readonly providerTimeoutMs: number;
+  /** Upload/processing budget for publishing with attachments; bounded to five minutes. */
+  readonly publishingMediaTimeoutMs: number;
   readonly backoffBaseMs: number;
   readonly backoffMaxMs: number;
   readonly reconcileDelayMs: number;
@@ -133,6 +135,7 @@ export const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
   claimLeaseMs: 60_000,
   executeLeaseMs: 10 * 60_000,
   providerTimeoutMs: 30_000,
+  publishingMediaTimeoutMs: 180_000,
   backoffBaseMs: 15_000,
   backoffMaxMs: 15 * 60_000,
   reconcileDelayMs: 60_000,
@@ -160,5 +163,21 @@ export interface ExecutionDeps {
 }
 
 export function resolveConfig(deps: ExecutionDeps): ExecutionConfig {
-  return { ...DEFAULT_EXECUTION_CONFIG, ...deps.config };
+  const config = { ...DEFAULT_EXECUTION_CONFIG, ...deps.config };
+  if (!Number.isSafeInteger(config.publishingMediaTimeoutMs) || config.publishingMediaTimeoutMs < 1 || config.publishingMediaTimeoutMs > 300_000) throw new Error('publishingMediaTimeoutMs must be an integer between1 and300000');
+  return config;
+}
+
+/** Per-action budget: mailbox, messages and text-only publishing retain their existing timeout. */
+export function actionProviderTimeout(deps: ExecutionDeps, action: ActionRow): number {
+  const config = resolveConfig(deps);
+  const payload = JSON.parse(action.payload) as { mediaUrls?: unknown };
+  return action.kind === 'social.publish' && Array.isArray(payload.mediaUrls) && payload.mediaUrls.length > 0 ? config.publishingMediaTimeoutMs : config.providerTimeoutMs;
+}
+/** Execution never leases media for less time than its bounded provider call plus cleanup margin. */
+export function actionExecuteLease(deps: ExecutionDeps, action: ActionRow): number {
+  const config = resolveConfig(deps);
+  const budget = actionProviderTimeout(deps, action);
+  const payload = JSON.parse(action.payload) as { mediaUrls?: unknown };
+  return action.kind === 'social.publish' && Array.isArray(payload.mediaUrls) && payload.mediaUrls.length > 0 ? Math.max(config.executeLeaseMs, budget + 5_000) : config.executeLeaseMs;
 }

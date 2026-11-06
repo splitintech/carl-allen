@@ -6,11 +6,13 @@ export function createActions(refresh) {
   return async function act(button, action, params, done) {
     button.disabled = true;
     try {
-      await call(action, params);
+      const result = await call(action, params);
       toast(done);
       await refresh();
+      return result;
     } catch (error) {
       toast(error.message);
+      return null;
     } finally {
       button.disabled = false;
     }

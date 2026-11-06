@@ -1,3 +1,5 @@
+import { registerPublishingRoutes } from './routes-publishing';
+import { registerAuthoringRoutes } from './routes-authoring';
 import { ulid } from '@splitin/outreach-contracts';
 import { authenticateToken, type AuthContext, type Engine } from '@splitin/outreach-core';
 import { Hono, type Context } from 'hono';
@@ -71,5 +73,7 @@ export function createApp(options: ServerOptions): Hono<ServerEnv> {
   });
   registerCampaignRoutes(app, engine);
   registerOperationRoutes(app, engine);
+  registerAuthoringRoutes(app, engine);
+  registerPublishingRoutes(app, engine);
   return app;
 }

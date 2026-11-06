@@ -1,7 +1,8 @@
 # ADR 0003 — No social-network automation; social steps are manual tasks
 
-- Status: Accepted
+- Status: Superseded by [ADR 0006](0006-capability-gated-social-browser.md)
 - Date: 2026-09-28
+- Superseded-Date: 2026-11-05
 
 ## Context
 
@@ -31,3 +32,10 @@ operator's account.
 - The engine is safe to publish and run against real accounts.
 - Hosts such as Papr Work may ship their own social automation; this project neither
   depends on nor extends it.
+
+## Supersession
+
+ADR 0006 allows capability-gated `social.publish` / `social.message` **only** for a
+declared `daytona-browser` execution placement, with no stealth tooling and with
+`manual.task` retained as the human fallback. The absolute ban above no longer applies
+to that gated path.
