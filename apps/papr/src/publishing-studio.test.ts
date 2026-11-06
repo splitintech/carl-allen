@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { chromium, type Page } from 'playwright';
@@ -9,8 +10,8 @@ type Post = { channel: string; text: string; accountId?: string; mediaIds: strin
 type Draft = { id: string; name: string; timezone: string; scheduledFor: string; posts: Post[]; status: string; actionIds: string[]; blocked: { channel: string; reason: string }[]; updatedAt: number; createdAt: number };
 type Asset = { id: string; name: string; mime: string; size: number; sha256: string; mediaUrl: string; createdAt: number };
 type Action = { id: string; kind: string; state: string; channel: string; text: string; dueAt: number; providerAccountId: string; approvalId: string; operationHash: string; mediaIds: string[]; draftId: string; reason: null };
-const artifacts = process.env.OUTREACH_BROWSER_ARTIFACT_DIR || '/private/tmp/outreach-publishing-ui-artifacts';
-const executablePath = process.env.OUTREACH_TEST_CHROME || '/Users/omkarchavan/Library/Caches/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell';
+const artifacts = process.env.OUTREACH_BROWSER_ARTIFACT_DIR || resolve(tmpdir(), 'outreach-publishing-ui-artifacts');
+const executablePath = process.env.OUTREACH_TEST_CHROME || chromium.executablePath();
 async function fixture(page: Page) {
   const names = ['linkedin', 'x', 'instagram', 'tiktok']; const accounts = names.map((channel) => ({ id: ulid(), provider: 'social-browser', externalAccountId: `https://${channel === 'linkedin' ? 'www.linkedin.com/in/' : `${channel}.com/`}${channel === 'tiktok' ? '@' : ''}studio-fixture/`, sender: { name: 'Studio fixture', address: 'fixture@example.invalid' }, health: 'ok', capabilities: { socialPublish: true, socialChannels: [channel], socialMediaTypes: channel === 'tiktok' ? ['video'] : ['image', 'video'], executionPlacement: 'daytona-browser' } }));
   const state = { accounts, drafts: [] as Draft[], media: [] as Asset[], actions: [] as Action[], approvals: [], roles: ['admin'], liveViewUrl: null, sendingStopped: false };
