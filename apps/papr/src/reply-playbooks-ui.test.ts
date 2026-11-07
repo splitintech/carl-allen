@@ -24,7 +24,7 @@ async function fixture(page:Page,role='approver',approved=false,unavailable=fals
   const path=resolve('apps/papr/bundle/apps/outreach-console',url.pathname==='/'?'publishing.html':url.pathname.slice(1));return route.fulfill({contentType:extname(path)==='.html'?'text/html':extname(path)==='.css'?'text/css':'application/javascript',body:readFileSync(path)});
  });return{book,requests};
 }
-async function open(page:Page){await page.goto('https://carl-allen.splitin.net/?view=inbox');await expect.poll(()=>page.locator('#runtime-state').textContent()).toBe('Workspace connected');await page.getByRole('button',{name:'Reply playbooks',exact:true}).click();await page.getByRole('button',{name:'Review rule',exact:true}).click();return page.getByRole('dialog',{name:'Review reply playbook',exact:true});}
+async function open(page:Page){await page.goto('https://carl-allen.splitin.net/?view=inbox');await expect.poll(()=>page.locator('#runtime-state').textContent()).toBe('Workspace connected');await page.getByRole('button',{name:'Reply playbooks',exact:true}).click();await page.getByRole('button',{name:'Review rule',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Review reply playbook',exact:true});await dialog.waitFor({state:'visible'});return dialog;}
 describe.skipIf(!enabled)('hosted independent reply review',()=>{
  it.each(['approved','rejected'])('requires a reason and the dedicated hash for %s',async decision=>{
   const browser=await chromium.launch({executablePath,headless:true});try{
