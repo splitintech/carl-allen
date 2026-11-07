@@ -396,6 +396,294 @@
         "OUTREACH_CONNECTION_FILE"
       ],
       "timeoutMs": 120000
+    },
+    "publishing-plan-prepare": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "storage-settings": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "storage-settings-save": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "publishing-actions-page": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "publishing-drafts-page": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "work-package-import": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "work-packages-list": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "work-package-get": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "work-package-repair": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "work-package-prepare": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "work-package-template": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "plan-approve": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "people-list": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "outreach-list": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "outreach-pause": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "inbox-list": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "inbox-assign": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "insights": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "team-list": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "team-invite": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "storage-cleanup": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "publishing-upload-status": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "policy-settings": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "policy-settings-save": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
     }
   }
 }

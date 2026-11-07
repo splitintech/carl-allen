@@ -1,0 +1,8 @@
+import { z } from 'zod';
+import { requireRole, audit, type AuthContext } from './auth';
+import type { DomainEnv } from './env';
+import { PolicySchema } from './playbook';
+const executionLimits=z.object({accountPerDay:z.number().int().min(1).max(500),channelPerDay:z.number().int().min(1).max(500)}).strict();
+export function getWorkspaceExecutionLimits(env:DomainEnv,ctx:AuthContext){requireRole(ctx,'viewer');const row=env.db.prepare('SELECT settings FROM workspaces WHERE id=?').get<{settings:string}>(ctx.workspaceId)!;const settings=JSON.parse(row.settings) as {executionLimits?:unknown};return executionLimits.parse(settings.executionLimits??{accountPerDay:10,channelPerDay:10});}
+export function setWorkspaceExecutionLimits(env:DomainEnv,ctx:AuthContext,input:unknown){requireRole(ctx,'admin');const limits=executionLimits.parse(input);return env.db.transaction(()=>{const row=env.db.prepare('SELECT settings FROM workspaces WHERE id=?').get<{settings:string}>(ctx.workspaceId)!;env.db.prepare('UPDATE workspaces SET settings=? WHERE id=?').run(JSON.stringify({...JSON.parse(row.settings),executionLimits:limits}),ctx.workspaceId);audit(env.db,ctx,env.now(),'workspace',ctx.workspaceId,'execution_limits_changed',{limits,appliesTo:'new-plan-preparations'});return limits;});}
+export function newPlanPolicy(env:DomainEnv,ctx:AuthContext,timezone:string){return PolicySchema.parse({approval:'every_action',unsubscribe:'reply',requirePostalAddress:false,window:{timezone,fallback:timezone,days:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],start:'00:00',end:'23:59'},limits:getWorkspaceExecutionLimits(env,ctx)});}

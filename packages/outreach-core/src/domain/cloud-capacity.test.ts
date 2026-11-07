@@ -1,0 +1,22 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { WorkPackageManifest, sha256Hex } from '@splitin/outreach-contracts';
+import { makeDomainEnv, type DomainTestEnv } from './domain.test-util';
+import { registerProviderAccount } from './operations';
+import { storeWorkPackage,repairWorkPackage } from './work-packages';
+import { prepareWorkPackage } from './work-package-prepare';
+import { decideApproval } from './approvals';
+import { planVerdict } from './cloud-plans';
+import { workspaceMediaQuota,startPublishingUpload,cancelPublishingUpload } from './publishing-media';
+import type { ActionRow } from '../execution/types';
+const envs:DomainTestEnv[]=[];const roots:string[]=[];
+afterEach(()=>{vi.unstubAllEnvs();for(const f of envs.splice(0))f.engine.db.close();for(const p of roots.splice(0))rmSync(p,{recursive:true,force:true});});
+describe('initial cloud workspace capacity',()=>{
+ it('prepares and approves 1000 monthly publications for 10 same-platform accounts without truncation',async()=>{const f=await makeDomainEnv();envs.push(f);const accounts:Record<string,string>={};for(let i=0;i<10;i++)accounts['account'+i]=await registerProviderAccount(f.engine,f.admin,{provider:'fake-social',externalAccountId:'owner'+i,sender:{name:'Owner'+i,address:'owner'+i+'@example.invalid'},purposes:['social_publishing'],secretRef:'env:FAKE_SOCIAL',executionPlacement:'daytona-browser'});
+  const manifest=WorkPackageManifest.parse({schemaVersion:1,packageId:'capacity',revision:1,name:'Monthly1000',timezone:'UTC',accountRefs:Object.keys(accounts).map(id=>({id,channel:'linkedin',label:id})),publishingPlans:Array.from({length:1000},(_,i)=>({id:'post'+i,accountRef:'account'+i%10,channel:'linkedin',text:'Approved monthly publication '+i,scheduledFor:new Date(f.now()+86400000+Math.floor(i/40)*86400000+(i%40)*60000).toISOString()}))});const p=storeWorkPackage(f.engine,f.operator,{name:manifest.name,html:'fixture',sourceHash:sha256Hex('fixture'),manifest,issues:[]});repairWorkPackage(f.engine,f.operator,p.id,{accountMap:accounts});const plan=prepareWorkPackage(f.engine,f.operator,p.id);expect(plan.preview.issues).toEqual([]);expect(f.engine.db.prepare('SELECT COUNT(*) n,COUNT(DISTINCT provider_account_id) targets FROM scheduled_actions').get()).toEqual({n:1000,targets:10});expect(f.engine.db.prepare("SELECT COUNT(*) n FROM approvals WHERE decision='pending'").get()).toEqual({n:1});decideApproval(f.engine,f.approver,{approvalId:plan.authorizationId!,operationHash:plan.operationHash!,decision:'approved'});const last=f.engine.db.prepare('SELECT * FROM scheduled_actions ORDER BY due_at DESC LIMIT 1').get<ActionRow>()!;expect(planVerdict(f.engine.db,last,last.due_at)).toEqual({kind:'pass'});expect(f.social.publishCalls).toBe(0);
+ });
+ it('accounts for 50 GiB across verified remote metadata plus active upload reservations without allocating 50 GiB locally',async()=>{const f=await makeDomainEnv();envs.push(f);const root=mkdtempSync(join(tmpdir(),'carl-quota-capacity-'));roots.push(root);vi.stubEnv('OUTREACH_MEDIA_DIR',root);const bytes=100*1024*1024;f.engine.db.transaction(()=>{for(let i=0;i<512;i++)f.engine.db.prepare("INSERT INTO publishing_media(id,workspace_id,name,mime,size,sha256,created_at,remote_ready) VALUES (?,'ws',?,'video/mp4',?,?,?,1)").run('asset'+i,'video'+i,bytes,(i+1).toString(16).padStart(64,'0'),f.now());});expect(workspaceMediaQuota(f.engine,f.viewer).quotaBytes).toBe(50*1024*1024*1024);expect(()=>startPublishingUpload(f.engine,f.operator,{name:'one.png',mime:'image/png',size:1})).toThrow(/storage limit/);f.engine.db.prepare("DELETE FROM publishing_media WHERE id='asset0'").run();const reservation=startPublishingUpload(f.engine,f.operator,{name:'video.mp4',mime:'video/mp4',size:bytes});expect(()=>startPublishingUpload(f.engine,f.operator,{name:'one.png',mime:'image/png',size:1})).toThrow(/storage limit/);cancelPublishingUpload(f.engine,f.operator,reservation.uploadId);expect(startPublishingUpload(f.engine,f.operator,{name:'video.mp4',mime:'video/mp4',size:bytes}).uploadId).toBeTruthy();
+ });
+});

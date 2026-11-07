@@ -17,7 +17,7 @@ export function executionAccountIssues(env: DomainEnv, workspaceId: string, kind
         return [`no adapter registered for provider ${account.provider}`];
     const caps = JSON.parse(account.capabilities || '{}') as CapabilitySnapshot;
     const social = kind.startsWith('social.');
-    const need: ProviderPurpose = kind === 'social.publish' ? 'social_publishing' : social ? 'social_messaging' : purpose;
+    const need: ProviderPurpose = (kind === 'social.publish' || kind === 'social.comment') ? 'social_publishing' : social ? 'social_messaging' : purpose;
     const issues: string[] = [];
     if (!purposePermitted(need, adapter.purposes, JSON.parse(account.purposes) as ProviderPurpose[]))
         issues.push(`purpose ${need} is not permitted by both provider ${account.provider} and the account`);
@@ -28,10 +28,11 @@ export function executionAccountIssues(env: DomainEnv, workspaceId: string, kind
     if (social || kind === 'browser.task') {
         if (caps.executionPlacement !== 'daytona-browser')
             issues.push('social/browser steps require account executionPlacement daytona-browser (ADR 0006)');
-        const supported = kind === 'social.publish' ? caps.socialPublish : kind === 'social.message' ? caps.socialMessage : kind === 'social.connect' ? caps.socialConnect : caps.browserTasks;
+        const supported = (kind === 'social.publish' || kind === 'social.comment') ? caps.socialPublish : kind === 'social.message' ? caps.socialMessage : kind === 'social.connect' ? caps.socialConnect : caps.browserTasks;
         if (supported !== true)
             issues.push(`${kind}: capability must be explicitly true`);
     }
+    if (kind === 'social.comment' && !adapter.social?.comment) issues.push('provider has no social comment port');
     if (kind === 'social.connect' && !adapter.social?.connect)
         issues.push('provider has no social connect port');
     if (kind === 'browser.task' && !adapter.browser)

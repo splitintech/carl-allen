@@ -1,6 +1,6 @@
 import { registerConfiguredAccount } from './browser-binding';
 import { PROVIDER_PURPOSES, OUTREACH_API_VERSION, ulid, type EmailContent, type ProviderContext, type SenderIdentity } from '@splitin/outreach-contracts';
-import { audit, checkAccountHealth, refreshAccountCapabilities, findTemplate, createTemplate, createContentCampaign, activateContentCampaign, requireRole, NotFoundError, ForbiddenError, listContentCampaigns, getContentCampaign, updateContentCampaign, deleteContentCampaign, updateScheduledAction, cancelScheduledAction, convertSocialActionToManual, scheduleAction, type Engine, type AuthContext } from '@splitin/outreach-core';
+import { audit, hasRole, checkAccountHealth, refreshAccountCapabilities, findTemplate, createTemplate, createContentCampaign, activateContentCampaign, requireRole, NotFoundError, ForbiddenError, listContentCampaigns, getContentCampaign, updateContentCampaign, deleteContentCampaign, updateScheduledAction, cancelScheduledAction, convertSocialActionToManual, scheduleAction, type Engine, type AuthContext } from '@splitin/outreach-core';
 import { z } from 'zod';
 import type { Hono } from 'hono';
 import { auth, type ServerEnv } from './app';
@@ -52,7 +52,7 @@ export function registerAuthoringRoutes(app: Hono<ServerEnv>, engine: Engine): v
   });
   app.post('/v1/accounts', async (c) => {
     const ctx = auth(c); requireRole(ctx, 'admin');
-    const input = z.object({ provider: z.string().min(1), externalAccountId: z.string().min(1), sender: z.object({ name: z.string(), address: z.string().email(), postalAddress: z.string().optional(), organization: z.string().optional() }).strict(), purposes: z.array(z.enum(PROVIDER_PURPOSES)).min(1), secretRef: z.string().min(1), executionPlacement: z.literal('daytona-browser').optional(), profileUrl: z.string().url().optional() }).strict().parse(await c.req.json());
+    const input = z.object({ provider: z.string().min(1), externalAccountId: z.string().min(1), sender: z.object({ name: z.string(), address: z.string().email(), postalAddress: z.string().optional(), organization: z.string().optional() }).strict(), purposes: z.array(z.enum(PROVIDER_PURPOSES)).min(1), secretRef: z.string().min(1), executionPlacement: z.literal('daytona-browser').optional(), profileUrl: z.string().url().optional(), loginConnectionId: z.string().min(1).optional(), publishingProfileUrl: z.string().url().optional() }).strict().parse(await c.req.json());
     return c.json({ accountId: await registerConfiguredAccount(engine, ctx, input) }, 201);
   });
   for (const operation of ['check', 'reconnect'] as const) app.post(`/v1/accounts/:id/${operation}`, async (c) => {
@@ -61,7 +61,7 @@ export function registerAuthoringRoutes(app: Hono<ServerEnv>, engine: Engine): v
     await refreshAccountCapabilities(engine, ctx, c.req.param('id'));
     const result = await checkAccountHealth(engine, c.req.param('id'));
     audit(engine.db, ctx, engine.now(), 'provider_account', c.req.param('id'), operation, { status: result.status });
-    return c.json({ ...result, liveViewUrl: process.env.OUTREACH_DAYTONA_LIVE_VIEW_URL ?? null });
+    return c.json({ ...result, liveViewUrl: hasRole(ctx,'admin') ? process.env.OUTREACH_DAYTONA_LIVE_VIEW_URL ?? null : null });
   });
   const drafts = (ctx: AuthContext, id: string, mutate = false) => {
     requireRole(ctx, mutate ? 'operator' : 'viewer');

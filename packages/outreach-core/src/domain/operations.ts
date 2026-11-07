@@ -31,6 +31,8 @@ export interface RegisterAccountInput {
   readonly webhookSecretRef?: string;
   /** Required `daytona-browser` for social.publish / social.message (ADR 0006). */
   readonly executionPlacement?: 'daytona-browser';
+  readonly loginConnectionId?: string;
+  readonly publishingProfileUrl?: string;
 }
 
 /** Registers a sending account and records the adapter's capability snapshot. Secrets are references only. */

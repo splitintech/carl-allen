@@ -23,7 +23,7 @@ API, worker and account-specific CDP browsers. The API and worker attach to thos
 browsers through unique loopback ports, never by independently opening the same
 profile directory. Browser bindings are watched every two seconds. Failed children
 restart with bounded exponential backoff; repeated failures stop the runtime.
-Readiness requires the authenticated API and all configured Chrome CDP endpoints.
+Readiness requires the authenticated API and active Chrome CDP endpoints. At most two Chrome processes are leased through the supervisor; other configured profiles are inactive on persistent disk, not failed. Login connections shared by company-page targets serialize effects and inbox reads.
 
 ## Prepare and build
 
@@ -187,3 +187,14 @@ The default execution lease is ten minutes; an explicitly shorter media lease is
 raised to the media budget plus five seconds. An expired executing lease becomes
 uncertain, never an automatic resend. A timeout after a possible effect keeps its
 budget reservation and requires reconciliation or human review.
+
+## Cloud gateway bootstrap environment
+
+Provision `CLOUD_GATEWAY_SECRET`, `CLOUD_MEDIA_SECRET`, `CARL_PUBLIC_ORIGIN`, and `OUTREACH_MEDIA_GATEWAY` through the trusted operator process. Bootstrap persists only explicitly allowed cloud names and OUTREACH_* settings in the owner-only `/data/outreach/runtime.env.json`; supervisor validates these names before loading them. Secrets remain outside source, HTML, screenshots and connection responses. The Worker and runtime share scoped gateway/media secrets; the user identity must still be authenticated and resolved to engine roles. Restart the supervised services after changing the private runtime environment. This does not create a second scheduler or require the Mac to remain online.
+
+Outlook automated outreach is an explicit deployment choice. The shipped runtime enables
+`outlookAdapter({ purposes: ['manual_correspondence'] })`. After the mailbox owner and
+tenant administrator permit the intended use, add `automated_outreach` to that adapter's
+`purposes` in `outreach.config.mjs` and register the selected account with the same purpose.
+Account identity, permitted purpose, suppression, live-recipient gate, daily policy and
+human plan approval remain required. Zoho exposes only inbox and drafts; it has no send port.

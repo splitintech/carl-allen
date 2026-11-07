@@ -45,7 +45,8 @@
     "@splitin/outreach-provider-email-gmail": "0.0.0",
     "@splitin/outreach-provider-email-outlook": "0.0.0",
     "@splitin/outreach-server": "0.0.0",
-    "@splitin/outreach-store-sqlite": "0.0.0"
+    "@splitin/outreach-store-sqlite": "0.0.0",
+    "@splitin/outreach-provider-email-zoho": "0.0.0"
   },
   "bin": {
     "outreach": "./dist/bin.js"

@@ -198,7 +198,11 @@ export interface ManualTaskProvider {
   prepare(ctx: ProviderContext, input: ManualTaskInput): Promise<void>;
 }
 
+export interface SocialCommentInput { readonly actionId: string; readonly idempotencyKey: string; readonly channel: string; readonly targetUrl: string; readonly text: string }
+export interface SocialConversation { readonly threadId: string; readonly peerUrl: string; readonly subject?: string; readonly messages: readonly { readonly id: string; readonly text: string; readonly inbound: boolean; readonly at: number }[]; readonly updatedAt: number }
+export interface ConversationInbox { listThreads(ctx: ProviderContext, cursor?: string): Promise<{ threads: readonly SocialConversation[]; nextCursor: string }> }
 export interface SocialPublishInput {
+  readonly format?: 'feed' | 'carousel' | 'video' | 'reel';
   readonly actionId: string;
   readonly idempotencyKey: string;
   readonly channel: string;
@@ -256,6 +260,9 @@ export interface SocialHealth {
  * Missing methods mean unsupported — never fall back to email or a local desktop Chrome session.
  */
 export interface SocialBrowserPort {
+  comment?(ctx: ProviderContext, input: SocialCommentInput): Promise<SendResult>;
+  conversations?(ctx: ProviderContext, cursor?: string): Promise<{ threads: readonly SocialConversation[]; nextCursor: string }>;
+  connectionStatus?(ctx: ProviderContext, targetUrl: string): Promise<'connected' | 'pending' | 'none' | 'unknown'>;
   connect?(ctx: ProviderContext, input: SocialConnectInput): Promise<SendResult>;
   publish(ctx: ProviderContext, input: SocialPublishInput): Promise<SendResult>;
   message(ctx: ProviderContext, input: SocialMessageInput): Promise<SendResult>;
@@ -276,6 +283,7 @@ export interface ProviderAdapter {
   readonly social?: SocialBrowserPort;
   readonly browser?: BrowserTaskPort;
   readonly drafts?: EmailDraftPort;
+  readonly inbox?: ConversationInbox;
 }
 
 /** A mailbox draft mutation was refused before any change to preserve unsupported content. */

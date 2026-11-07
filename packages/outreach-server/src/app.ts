@@ -1,7 +1,10 @@
+import { handleRemoteMcp } from '@splitin/outreach-mcp';
+import { authenticateCloudRequest } from './cloud-auth';
+import { registerWorkspaceRoutes } from './routes-workspace';
 import { registerPublishingRoutes } from './routes-publishing';
 import { registerAuthoringRoutes } from './routes-authoring';
 import { ulid } from '@splitin/outreach-contracts';
-import { authenticateToken, type AuthContext, type Engine } from '@splitin/outreach-core';
+import { authenticateToken, ForbiddenError, type AuthContext, type Engine } from '@splitin/outreach-core';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { toApiError } from './errors';
@@ -33,6 +36,7 @@ export function auth(c: ServerContext): AuthContext {
 export function createApp(options: ServerOptions): Hono<ServerEnv> {
   const { engine } = options;
   const app = new Hono<ServerEnv>();
+  const internalContexts = new WeakMap<Request, AuthContext>();
 
   app.use('*', async (c, next) => {
     const traceId = ulid();
@@ -58,15 +62,29 @@ export function createApp(options: ServerOptions): Hono<ServerEnv> {
     if (c.req.path.startsWith('/v1/webhooks/')) return next();
     const header = c.req.header('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-    c.set('auth', engine.db.transaction(() => authenticateToken(engine.db, token, 'http', c.get('traceId'), engine.now())));
+    const delegated = internalContexts.get(c.req.raw) ?? await authenticateCloudRequest(c.req.raw, engine, c.get('traceId'));
+    c.set('auth', delegated ?? engine.db.transaction(() => authenticateToken(engine.db, token, 'http', c.get('traceId'), engine.now())));
     return next();
   });
   app.use('/v1/imports/preview', bodyLimit({ maxSize: options.maxImportBytes ?? 25 * 1024 * 1024, onError: (c) => c.json({ error: 'too_large' }, 413) }));
   app.use('/v1/*', async (c, next) => {
+    if (c.req.path.startsWith('/v1/work-packages')) return bodyLimit({ maxSize: 25 * 1024 * 1024, onError: (ctx) => ctx.json({error:'too_large'},413) })(c,next);
     if (c.req.path === '/v1/imports/preview' || c.req.path.startsWith('/v1/webhooks/')) return next();
     return bodyLimit({ maxSize: options.maxJsonBytes ?? 256 * 1024, onError: (ctx) => ctx.json({ error: 'too_large' }, 413) })(c, next);
   });
 
+  app.all('/mcp', bodyLimit({maxSize:1024*1024,onError:(c)=>c.json({error:'too_large'},413)}), async (c) => {
+    const ctx=await authenticateCloudRequest(c.req.raw,engine,c.get('traceId'));
+    if(!ctx||ctx.source!=='mcp')throw new ForbiddenError('Authenticated MCP delegation required');
+    const signed=JSON.parse(Buffer.from(c.req.header('x-carl-delegation')!,'base64url').toString()) as {scopes:string[]};
+    return handleRemoteMcp(c.req.raw,{publicOrigin:process.env.CARL_PUBLIC_ORIGIN??'https://carl-allen.splitin.net',scopes:signed.scopes,requestApi:async(method,path,body)=>{
+      const request=new Request('http://internal'+path,{method,headers:{'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+      internalContexts.set(request,ctx);
+      const result=await app.fetch(request);
+      if(!result.ok)throw new Error('MCP operation refused');
+      return result.json();
+    }});
+  });
   app.get('/v1/me', (c) => {
     const ctx = auth(c);
     return c.json({ workspaceId: ctx.workspaceId, principalId: ctx.principalId, roles: ctx.roles });
@@ -75,5 +93,6 @@ export function createApp(options: ServerOptions): Hono<ServerEnv> {
   registerOperationRoutes(app, engine);
   registerAuthoringRoutes(app, engine);
   registerPublishingRoutes(app, engine);
+  registerWorkspaceRoutes(app,engine);
   return app;
 }

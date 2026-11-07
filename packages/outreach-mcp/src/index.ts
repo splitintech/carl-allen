@@ -38,3 +38,5 @@ export async function serveStdio(context: ToolContext): Promise<McpServer> {
   await server.connect(new StdioServerTransport());
   return server;
 }
+
+export { createRemoteMcp, handleRemoteMcp, REMOTE_TOOL_NAMES, type RemoteMcpContext } from './remote';

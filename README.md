@@ -1,6 +1,9 @@
 <p align="center"><img src="docs/brand/splitin-logo.png" alt="SplitIn" width="96" height="96"></p>
 
-# Outreach Engine
+# Carl-Allen
+
+A private publishing and outreach workspace with HTML handoffs, a dark calendar/composer,
+Google team access, monthly plan approvals and Daytona execution.
 
 Provider-neutral outreach orchestration with durable state, explicit human approval,
 reply/opt-out handling and an append-only audit log. Import contacts, compile versioned
@@ -10,14 +13,14 @@ The CLI, HTTP API, local MCP server and Papr console are clients of the same eng
 ## Status and distribution
 
 This standalone repository includes the engine workspace and the later Papr compatibility
-changes. It contains **12 public-intended npm packages**, a private end-to-end test package
+changes. It contains provider-neutral npm packages, a private end-to-end test package
 and a private Papr application. The workspace root itself is private.
 
 All public packages currently use development version `0.0.0`. No npm publication or
 production deployment is implied. Use local builds and packed artifacts for development.
 Live Gmail/Outlook acceptance, Papr desktop acceptance and host-specific MCP acceptance
 remain separate release gates. Papr's optional local worker remains disabled by default;
-remote MCP is not exposed.
+authenticated remote MCP is included in the deployable gateway. Cloudflare deployment is performed by the workspace owner. See [the deployment guide](deploy/cloudflare/README.md) and [requirement evidence](docs/plans/carl-allen-requirements.json).
 
 ## Behavior and boundaries
 
@@ -27,7 +30,10 @@ remote MCP is not exposed.
 - Imports from CSV, JSON, inert HTML and XLSX through isolated parsing packages.
 - Versioned playbooks, template rendering, approval and campaign execution controls.
 - Gmail and Outlook adapters, Slack notifications and local stdio MCP.
-- Social-network steps remain manual tasks; no automated social-site interaction.
+- Verified Daytona browser publishing on LinkedIn, X, Instagram and TikTok, with independent account identities.
+- Reviewed LinkedIn/Instagram browser outreach, coordinated sequences, inboxes and deterministic reply playbooks.
+- Zoho read/draft OAuth adapter; sending stays manual in Zoho.
+- Inert HTML manifests/guided repair, R2 immutable media, 90-day plans and one self-contained HTML interface.
 - Models may draft or propose work; deterministic engine code controls execution.
 
 A provider adapter being present does not establish live account configuration or acceptance.
@@ -36,12 +42,12 @@ adapter send functions directly.
 
 ## Requirements and quick start
 
-Use Node.js **22.13 or later** (including built-in `node:sqlite`) and npm.
+Use Node.js **24** for the cloud gateway; engine packages also support **22.13 or later** (including built-in `node:sqlite`) and npm.
 No live provider credentials are needed for fake-provider tests.
 
 ```sh
-git clone https://github.com/splitintech/outreach-engine.git
-cd outreach-engine
+git clone https://github.com/splitintech/carl-allen.git
+cd carl-allen
 npm ci
 npm run build
 mkdir -p .test-tmp
@@ -88,7 +94,7 @@ must stay outside Git and package artifacts.
 | `@splitin/outreach-provider-email-outlook` | M8 | Outlook / Exchange Online adapter via Microsoft Graph: MIME draft-then-send, Sent Items reconciliation, rotating refresh tokens |
 | `@splitin/outreach-provider-kit` | M8 | Shared adapter building blocks: HTTP outcome classification, loopback OAuth (PKCE), DSN parsing |
 | `@splitin/outreach-notify-slack` | M8 | Slack notifications: incoming webhook or `chat.postMessage`, escaped Block Kit |
-| Zoho Mail adapter | M8 | Automated sending excluded by current provider policy; see proposed ADR 0005 |
+| `@splitin/outreach-provider-email-zoho` | Cloud workspace | Regional OAuth, inbox/thread reads and draft CRUD; no sending port |
 
 
 The package table retains milestone labels for traceability. Current implementation and

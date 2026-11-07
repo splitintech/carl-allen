@@ -6,6 +6,7 @@ const home = process.env.OUTREACH_HOME ?? '/data/outreach';
 if (!process.env.DAYTONA_SANDBOX_ID || process.platform !== 'linux') throw new Error('Daytona Linux runtime required');
 privateJson(`${home}/runtime.env.json`, {
   ...readPrivateJson(`${home}/runtime.env.json`, {}),
+  ...Object.fromEntries(Object.entries(process.env).filter(([key,value]) => /^(OUTREACH_[A-Z0-9_]+|CLOUD_GATEWAY_SECRET|CLOUD_MEDIA_SECRET|CARL_PUBLIC_ORIGIN)$/.test(key) && typeof value === 'string')),
   DAYTONA_SANDBOX_ID: process.env.DAYTONA_SANDBOX_ID,
   OUTREACH_WORKSPACE: process.env.OUTREACH_WORKSPACE ?? 'default',
   OUTREACH_PRINCIPAL: 'runtime:admin',

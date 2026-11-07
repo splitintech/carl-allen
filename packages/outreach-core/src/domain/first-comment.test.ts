@@ -1,0 +1,20 @@
+import { afterEach,it,expect } from 'vitest';
+import { sha256Hex,WorkPackageManifest,type SocialCommentInput } from '@splitin/outreach-contracts';
+import { makeDomainEnv,type DomainTestEnv } from './domain.test-util';
+import { registerProviderAccount } from './operations';
+import { storeWorkPackage,repairWorkPackage } from './work-packages';
+import { prepareWorkPackage } from './work-package-prepare';
+import { decideApproval } from './approvals';
+const opened:DomainTestEnv[]=[];afterEach(()=>{for(const f of opened.splice(0))f.engine.db.close();});
+it('executes a dependent first comment from a confirmed parent receipt without repeating the post',async()=>{
+ const f=await makeDomainEnv();opened.push(f);const social=f.engine.adapters.get('fake-social')!.social!;let posts=0;const comments:SocialCommentInput[]=[];
+ social.publish=async()=>{posts++;return{kind:'accepted',receipt:{providerMessageId:'urn:li:activity:123456789',acceptedAt:f.now(),raw:{url:'https://www.linkedin.com/feed/update/urn:li:activity:123456789/'}}};};
+ social.comment=async(_ctx,input)=>{comments.push(input);return{kind:'unknown',detail:'Comment clicked but native confirmation timed out'};};
+ const account=await registerProviderAccount(f.engine,f.admin,{provider:'fake-social',externalAccountId:'owner',sender:{name:'Owner',address:'owner@example.invalid'},purposes:['social_publishing'],secretRef:'env:FAKE_SOCIAL',executionPlacement:'daytona-browser'});
+ const m=WorkPackageManifest.parse({schemaVersion:1,packageId:'comment-plan',revision:1,name:'Post and comment',accountRefs:[{id:'a',channel:'linkedin',label:'Owner'}],publishingPlans:[{id:'p',accountRef:'a',channel:'linkedin',text:'Approved post',firstComment:'Approved first comment',scheduledFor:new Date(f.now()+60000).toISOString()}]});const html='<html>Reviewed fixture</html>';
+ const p=storeWorkPackage(f.engine,f.operator,{name:m.name,html,manifest:m,issues:[],sourceHash:sha256Hex(html)});repairWorkPackage(f.engine,f.operator,p.id,{accountMap:{a:account}});const prepared=prepareWorkPackage(f.engine,f.operator,p.id);expect(prepared.authorizationId).toBeTruthy();
+ decideApproval(f.engine,{...f.approver,source:'http'},{approvalId:prepared.authorizationId!,operationHash:prepared.operationHash!,decision:'approved'});f.advance(60000);
+ await f.engine.runOnce();f.advance(60000);await f.engine.runOnce();f.advance(60000);await f.engine.runOnce();
+ expect(posts).toBe(1);expect(comments).toHaveLength(1);expect(comments[0]).toMatchObject({targetUrl:'https://www.linkedin.com/feed/update/urn:li:activity:123456789/',text:'Approved first comment'});
+ expect(f.engine.db.prepare("SELECT state FROM scheduled_actions WHERE kind='social.publish'").get()).toEqual({state:'succeeded'});expect(f.engine.db.prepare("SELECT state FROM scheduled_actions WHERE kind='social.comment'").get()).toEqual({state:'uncertain'});
+});

@@ -1,14 +1,15 @@
 export const PLATFORMS = [
-  { id: 'linkedin', name: 'LinkedIn', icon: 'in', cap: 3000, maxImages: 4, host: 'linkedin.com', hint: 'Text, images or one video' },
+  { id: 'linkedin', name: 'LinkedIn', icon: 'in', cap: 3000, maxImages: 20, host: 'linkedin.com', hint: 'Text, images or one video' },
   { id: 'x', name: 'X', icon: '𝕏', cap: 280, maxImages: 4, host: 'x.com', hint: 'Text, images or one video' },
   { id: 'instagram', name: 'Instagram', icon: '◎', cap: 2200, maxImages: 10, host: 'instagram.com', hint: 'Images or one video · caption optional' },
   { id: 'tiktok', name: 'TikTok', icon: '♪', cap: 2200, maxImages: 0, host: 'tiktok.com', hint: 'One video · caption optional' },
 ];
+export function applyCapabilities(limits) { for(const p of PLATFORMS) { const value=limits?.platforms?.[p.id]; if(value)Object.assign(p,{cap:value.text,maxImages:value.images,formats:value.formats}); } }
 export const platform = (id) => PLATFORMS.find((p) => p.id === id) || PLATFORMS[0];
 export const channels = (a) => a.capabilities?.socialChannels || [];
 export function accountsFor(data, channel) { return (data.accounts || []).filter((a) => channels(a).includes(channel)); }
 export const accountName = (a) => a?.sender?.name || a?.externalAccountId || 'Connect an account';
-export const keyOf = (post) => post.channel;
+export const keyOf = (post) => post.targetId || `${post.channel}:${post.accountId || 'draft'}`;
 export function validatePost(post, media, accounts) {
   const p = platform(post.channel); const assets = post.mediaIds.map((id) => media.find((asset) => asset.id === id)); const errors = [];
   if (!post.text.trim() && !post.mediaIds.length) errors.push('Add a caption or media.');
@@ -36,9 +37,11 @@ export function zonedISO(value, zone) {
   for (let n = 0; n < 4; n++) { const p = Object.fromEntries(format.formatToParts(new Date(guess)).filter((v) => v.type !== 'literal').map((v) => [v.type, Number(v.value)])); const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - guess; guess = utc - offset; }
   const check = Object.fromEntries(format.formatToParts(new Date(guess)).filter((v) => v.type !== 'literal').map((v) => [v.type, Number(v.value)]));
   if ([check.year, check.month, check.day, check.hour, check.minute].some((v, i) => v !== target[i])) throw new Error('This time does not exist in the selected time zone. Choose another time.');
+  for (const candidate of [guess - 3600000, guess + 3600000]) { const alternate = Object.fromEntries(format.formatToParts(new Date(candidate)).filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)])); if ([alternate.year, alternate.month, alternate.day, alternate.hour, alternate.minute].every((value, i) => value === target[i])) throw new Error('This time occurs twice in the selected time zone. Choose another time or use UTC to specify the intended instant.'); }
   return new Date(guess).toISOString();
 }
 export function scheduleInZone(value, zone) {
+  if (!value) return '';
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(value)).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }

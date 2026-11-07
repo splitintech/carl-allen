@@ -1,3 +1,4 @@
+import { sequencePreflight } from './sequence-checks';
 import type { ErrorEffect, SqlDatabase } from '@splitin/outreach-contracts';
 import type { Actor } from '../execution/actions-repo';
 import type { ActionEffects, ActionRow, PreflightCheck, RatePolicy, RateLimit } from '../execution/types';
@@ -79,7 +80,7 @@ export function domainChecks(): PreflightCheck[] {
     const slot = nextSlot(now, policy.window, zone);
     return slot > now ? { kind: 'defer', until: slot, reason: 'outside_send_window' } : { kind: 'pass' };
   };
-  return [enrollmentLive, campaignLive, notSuppressed, lawfulBasis, approved, inWindow];
+  return [enrollmentLive, campaignLive, notSuppressed, lawfulBasis, approved, sequencePreflight(), inWindow];
 }
 
 /** Per-campaign budgets from the playbook policy; notifications and manual tasks are not budgeted. */

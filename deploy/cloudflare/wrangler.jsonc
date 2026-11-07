@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "carl-allen",
+  "main": "index.mjs",
+  "compatibility_date": "2026-11-07",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "carl-allen.splitin.net", "custom_domain": true }],
+  "assets": { "directory": "../../dist", "binding": "ASSETS", "run_worker_first": true },
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "CONFIGURE_OAUTH_KV_NAMESPACE" }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "carl-allen-private-media" }],
+  "vars": {
+    "PUBLIC_ORIGIN": "https://carl-allen.splitin.net",
+    "GOOGLE_CLIENT_ID": "CONFIGURE_GOOGLE_WEB_CLIENT",
+    "WORKSPACE_ID": "default",
+    "DAYTONA_API_BASE": "https://app.daytona.io/api/",
+    "DAYTONA_ENGINE_PORT": "8787"
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 1 }
+}
