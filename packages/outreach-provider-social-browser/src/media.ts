@@ -4,6 +4,7 @@ import { loadStoredMedia, type MediaAttachment } from './stored-media';
 export interface MediaPolicy {
   readonly allowedOrigins: readonly string[];
   readonly assetDirectory?: string;
+  readonly stageStoredMedia?: (ctx: ProviderContext, hash: string, filePath: string) => Promise<void>;
   readonly maxFiles?: number;
   readonly maxBytesPerFile?: number;
   readonly allowFixtureHttp?: boolean;
@@ -19,7 +20,7 @@ function imageType(data: Buffer): string | null {
 /** Fetch approved image URLs before opening the composer. No file paths, redirects or unbounded bodies. */
 export async function loadImages(ctx: ProviderContext, urls: readonly string[], policy?: MediaPolicy): Promise<ImageAttachment[]> {
   if (!policy?.allowedOrigins.length) throw new Error('Image attachments require configured allowed media origins');
-  const maxFiles = Math.min(policy.maxFiles ?? 4, 9);
+  const maxFiles = Math.min(policy.maxFiles ?? 20, 20);
   const maxBytes = Math.min(policy.maxBytesPerFile ?? 8 * 1024 * 1024, 20 * 1024 * 1024);
   if (urls.length > maxFiles || maxFiles < 1 || maxBytes < 1) throw new Error('Image attachment limit exceeded');
   const files: ImageAttachment[] = [];
@@ -71,9 +72,9 @@ export async function attachImages(page: Page, files: readonly ImageAttachment[]
 
 /** Stored uploads may contain video; arbitrary remote video fetches are deliberately unsupported. */
 export async function loadMedia(ctx: ProviderContext, refs: readonly string[], policy?: MediaPolicy): Promise<MediaAttachment[]> {
-  if (refs.length > Math.min(policy?.maxFiles ?? 10, 10)) throw new Error('Media attachment limit exceeded');
+  if (refs.length > Math.min(policy?.maxFiles ?? 20, 20)) throw new Error('Media attachment limit exceeded');
   const files: MediaAttachment[] = [];
-  for (const ref of refs) files.push(ref.startsWith('outreach-media:') ? await loadStoredMedia(ctx, ref, policy?.assetDirectory) : (await loadImages(ctx, [ref], policy))[0]!);
+  for (const ref of refs) files.push(ref.startsWith('outreach-media:') ? await loadStoredMedia(ctx, ref, policy?.assetDirectory, policy?.stageStoredMedia) : (await loadImages(ctx, [ref], policy))[0]!);
   return files;
 }
 export async function attachVideo(page: Page, file: MediaAttachment, timeoutMs: number): Promise<void> {

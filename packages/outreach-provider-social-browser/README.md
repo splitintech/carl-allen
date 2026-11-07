@@ -166,3 +166,11 @@ Daytona image installs the browser matched to locked Playwright 1.65.0; passing 
 local override does not establish that image's boot or provider acceptance. Those
 require separate runtime and signed-in-account evidence. No real social post,
 message or invitation is sent by this fixture suite.
+
+## Reviewed outreach and publishing identities
+
+Instagram browser messages verify the opened peer before the Send boundary and require a newly observed native message identifier; unconfirmed effects remain uncertain. Inbox polling supports LinkedIn and Instagram with native thread/message identity, read timestamps and account-specific cursors. Unsupported layouts fail closed rather than reporting a healthy empty inbox. Actual live-account acceptance remains necessary. LinkedIn connection acceptance is read independently of the invitation-send receipt.
+
+An administrator can register a LinkedIn company target using an existing personal login. Its binding records `connectionId`, `loginProfileUrl`, and `publishingProfileUrl` independently. The provider checks the personal login, selected composer actor and publication receipt author. Company-page messaging is not advertised. First comments on supported owned LinkedIn/Instagram posts have their own effect boundary and native receipt; failed comments never repeat the publication. LinkedIn image publishing accepts up to20 images; format availability remains bounded by native capability and account acceptance.
+
+The supervisor leases at most2 active persistent Chrome processes. Inactive profiles remain on sandbox-local disk and do not make readiness fail. Effects, inbox reads and health checks serialize by login connection even when several publishing targets share it. R2 cache misses use an administrator-provided staging callback, then the provider independently verifies bytes and approved SHA256 before attaching them.

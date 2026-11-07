@@ -67,6 +67,9 @@ export function transitionAction(
     .prepare(`UPDATE scheduled_actions SET ${sets.join(', ')} WHERE id = ? AND state = ?`)
     .run(...values, action.id, action.state);
   if (result.changes !== 1) throw new StaleActionError(action.id, action.state);
+  // Only worker deferrals/reconciliation may advance a frozen plan's execution clock.
+  // User schedule edits require a new approval and must never update this snapshot.
+  if(actor.kind==='worker'&&patch.due_at!==undefined)db.prepare('UPDATE plan_actions SET execution_due_at=? WHERE action_id=? AND execution_due_at=?').run(patch.due_at,action.id,action.due_at);
   appendAudit(db, {
     workspaceId: action.workspace_id,
     at: now,

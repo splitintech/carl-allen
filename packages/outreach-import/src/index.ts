@@ -6,3 +6,5 @@ export { parseHtmlTable, parseHtmlCards, parseSelector } from './html';
 export * from './resolve';
 export * from './importer';
 export * from './export';
+
+export * from './work-package';

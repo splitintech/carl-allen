@@ -1,0 +1,732 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-07",
+  "releaseStatus": "source-qualified-pending-external-acceptance",
+  "releaseComplete": false,
+  "identityDecision": "Google-only; supersedes Auth0 magic links",
+  "cloudflareDeploymentOwner": "user",
+  "requirements": [
+    {
+      "id": "B01",
+      "requirement": "Preserve dirty primary checkout and isolate remote main",
+      "implementation": "implemented",
+      "source": [
+        "docs/plans/carl-allen-cloud-workspace.md"
+      ],
+      "automatedEvidence": [
+        "external:primary-preservation.json"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "B02",
+      "requirement": "Forward-only migrations preserve historical checksums and existing action references",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-store-sqlite/src/migrate.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/social-execution.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "I01",
+      "requirement": "Google-only invited identity, server-owned membership and workspace isolation",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-server/src/cloud-auth.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/cloud-auth.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "I02",
+      "requirement": "PKCE, state, nonce, verified Google email and recoverable same-browser login",
+      "implementation": "implemented",
+      "source": [
+        "deploy/cloudflare/auth.mjs"
+      ],
+      "automatedEvidence": [
+        "deploy/cloudflare/worker.test.mjs"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "I03",
+      "requirement": "Role checks, per-request signed body/path delegation and replay rejection",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-server/src/cloud-auth.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/cloud-auth.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "I04",
+      "requirement": "Admin invitations, operators, approvers and viewers",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/outreach-workspace.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/work-packages.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "H01",
+      "requirement": "Versioned inert JSON manifest contract and credential/approval assertion rejection",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-contracts/src/work-package.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-import/src/work-package.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "H02",
+      "requirement": "Arbitrary HTML table/text extraction without scripts or remote resources",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-import/src/work-package.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-import/src/work-package.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "H03",
+      "requirement": "Guided mapping, repair, source links and explicit account/media resolution",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/work-packages.js"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/cloud-workspace-ui.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "H04",
+      "requirement": "Idempotent revisions, conflicts, diffs and superseded future work",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/work-packages.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/cloud-plans.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "H05",
+      "requirement": "Durable cloud receipt only after original HTML and required media verification",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/work-packages.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/r2-storage.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "A01",
+      "requirement": "Separate monthly plan approval and unchanged legacy72-hour rules",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/cloud-plans.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/work-packages.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "A02",
+      "requirement": "Exact accounts, recipients, rendered content, media hashes, purpose, policy, schedule and validity",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/cloud-plans.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/cloud-plans.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "A03",
+      "requirement": "Day20/day31 execution after a single human approval",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/cloud-plans.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/work-packages.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "A04",
+      "requirement": "Revocation, edits and expired review renewal require fresh frozen scope",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/approvals.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/cloud-plans.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "A05",
+      "requirement": "90-day horizon and missed publication slots over1 hour held for review",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/cloud-plans.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/work-packages.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "A06",
+      "requirement": "Daily-cap forecast across requested, pending and prior effects before approval",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/plan-capacity.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/plan-capacity.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P01",
+      "requirement": "Separate browser login connection from publishing target including LinkedIn company page",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-server/src/browser-binding.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/company-binding.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P02",
+      "requirement": "Multiple same-platform targets retain stable bindings and independent actions",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/publishing-drafts.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/cloud-capacity.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P03",
+      "requirement": "Signed-in identity, selected author, recipient and native receipt checks",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-social-browser/src/network-publish.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/outreach-native.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P04",
+      "requirement": "Serialize effects per login and pool at most2 active browsers with persistent inactive profiles",
+      "implementation": "implemented",
+      "source": [
+        "deploy/daytona/browser-pool.mjs"
+      ],
+      "automatedEvidence": [
+        "deploy/daytona/browser-pool.test.mjs"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P05",
+      "requirement": "Uncertain effects are held without blind re-send",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/execution/preflight.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/execution/invariants.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P06",
+      "requirement": "LinkedIn/X/Instagram/TikTok media publishing with native account restrictions",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-social-browser/src/index.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/multiplatform.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P07",
+      "requirement": "Central format matrix, LinkedIn20 photos and qualified reel/carousel markers",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-contracts/src/publishing.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/multiplatform.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "P08",
+      "requirement": "Supported first comments depend on a confirmed native publication and never repeat it",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-social-browser/src/comments.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/first-comment.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "M01",
+      "requirement": "Private immutable R2 adapter, hashes and local-only legacy compatibility",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/r2-storage.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/r2-storage.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "M02",
+      "requirement": "50GiB configurable quota and reservation/cancellation accounting",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/publishing-media.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/cloud-capacity.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "M03",
+      "requirement": "Resumable chunk upload, server offset, pinned checksum and explicit cancellation",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/publishing-media.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/publishing.test.ts",
+        "apps/papr/src/publishing-upload-resume.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "M04",
+      "requirement": "512MiB verified remote cache and isolated browser execution staging",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/publishing-cache.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/stored-media.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "M05",
+      "requirement": "Protected references, deletion tombstones and retry cleanup",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/publishing-durable.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/publishing.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "M06",
+      "requirement": "Consistent encrypted database/media metadata and separate quiesced profile exports",
+      "implementation": "implemented",
+      "source": [
+        "scripts/cloud-recovery.mjs"
+      ],
+      "automatedEvidence": [
+        "scripts/cloud-recovery.test.mjs"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "U01",
+      "requirement": "Dark Carl-Allen sidebar and Home/Create/Publish/People/Outreach/Inbox/Insights/Settings",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/controller.js"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/cloud-workspace-ui.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "U02",
+      "requirement": "Month/week/list, timezone, tags, statuses, undated drafts and account filters",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/calendar.js"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/cloud-workspace-ui.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "U03",
+      "requirement": "Multi-account split composer, independent captions/media/time/first comments and native previews",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/composer.js"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/publishing-studio.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "U04",
+      "requirement": "Keyboard editing, focus management, mobile layout and empty/error states",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/utils.js"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/publishing-studio.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "U05",
+      "requirement": "Draft drag-to-reschedule opens reviewable edits and invalidates on save",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/calendar.js"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/cloud-workspace-ui.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "U06",
+      "requirement": "Modular source builds single HTML without external executable dependencies",
+      "implementation": "implemented",
+      "source": [
+        "scripts/build-publishing.mjs"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/publishing-integration.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "O01",
+      "requirement": "Sourced contact matching/deduplication and personalized reviewed sequence imports",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/work-package-prepare.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/work-packages.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "O02",
+      "requirement": "LinkedIn messages/invitations and separate Instagram browser DM/request executor",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-social-browser/src/instagram-message.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/outreach-native.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "O03",
+      "requirement": "Elapsed/acceptance waits and account-specific fresh monitoring",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/sequence-checks.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/inbox-sync.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "O04",
+      "requirement": "Cross-channel reply and opt-out stop with deduplication and suppression precedence",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/inbox-sync.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/inbox-sync.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "O05",
+      "requirement": "Deterministic approved reply rules, expiry, response bounds and loop prevention",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/inbox-sync.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/inbox-sync.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "O06",
+      "requirement": "Account-specific inbox cursors, conversations, assignments and team notes",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/outreach-workspace.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/inbox-sync.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "E01",
+      "requirement": "Zoho regional OAuth, refresh/revocation, full inbox bodies and draft CRUD",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-email-zoho/src/index.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-email-zoho/src/zoho.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "E02",
+      "requirement": "No Zoho sender port and manual Open in Zoho",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-email-zoho/src/index.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-email-zoho/src/zoho.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "E03",
+      "requirement": "Gmail/Outlook grants, permitted purpose and existing approval/suppression/live-send gates",
+      "implementation": "implemented",
+      "source": [
+        "deploy/daytona/outreach.config.mjs"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/execution/invariants.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "C01",
+      "requirement": "Authenticated Streamable HTTP discovery/PKCE/scopes/audience/resource/expiry/refresh",
+      "implementation": "implemented",
+      "source": [
+        "deploy/cloudflare/index.mjs"
+      ],
+      "automatedEvidence": [
+        "deploy/cloudflare/workerd.test.mjs"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "C02",
+      "requirement": "Reuse core business services and retain stdio MCP",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-mcp/src/remote.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-mcp/src/remote.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "C03",
+      "requirement": "Template/account discovery, package preparation, review links, status and permitted pauses",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-mcp/src/remote.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-mcp/src/remote.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "C04",
+      "requirement": "MCP cannot approve and no ChatGPT attachment visibility assumption",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/cloud-plans.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/work-packages.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "C05",
+      "requirement": "Private Daytona API credential refresh and admin-only signed browser view",
+      "implementation": "implemented",
+      "source": [
+        "deploy/cloudflare/proxy.mjs"
+      ],
+      "automatedEvidence": [
+        "deploy/cloudflare/proxy.test.mjs"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "D01",
+      "requirement": "Deployment configuration, preflight and reproducible Worker dry-run",
+      "implementation": "implemented",
+      "source": [
+        "deploy/cloudflare/wrangler.jsonc"
+      ],
+      "automatedEvidence": [
+        ".github/workflows/cloud-workspace.yml"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "D02",
+      "requirement": "10 targets and1000 monthly publications without truncation",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/cloud-plans.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/cloud-capacity.test.ts"
+      ],
+      "liveAcceptance": "pending-when-applicable"
+    },
+    {
+      "id": "A07",
+      "requirement": "Visible administrator-configured daily budgets affect only newly frozen plans",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/workspace-policy.ts",
+        "apps/papr/bundle/apps/outreach-console/publishing/policy.js"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/workspace-policy.test.ts"
+      ],
+      "liveAcceptance": "pending-deployment"
+    },
+    {
+      "id": "D03",
+      "requirement": "Historical migration inventory, packed consumers, stdio MCP and10000-action concurrent soak",
+      "implementation": "implemented",
+      "source": [
+        "scripts/check-migration.py",
+        "scripts/check-packed.mjs",
+        "scripts/soak.mjs"
+      ],
+      "automatedEvidence": [
+        "scripts/mcp-smoke.mjs"
+      ],
+      "liveAcceptance": "synthetic-only"
+    }
+  ],
+  "externalGates": [
+    {
+      "id": "G01",
+      "gate": "Google OAuth client and first invited administrator",
+      "owner": "workspace-admin",
+      "status": "not-yet-accepted"
+    },
+    {
+      "id": "G02",
+      "gate": "Cloudflare Worker/R2/KV/custom-domain deployment",
+      "owner": "user",
+      "status": "not-yet-accepted"
+    },
+    {
+      "id": "G03",
+      "gate": "New source/database migrations active on existing Daytona runtime",
+      "owner": "runtime-operator",
+      "status": "not-yet-accepted"
+    },
+    {
+      "id": "G04",
+      "gate": "Designated social identities and mailbox OAuth grants",
+      "owner": "workspace-admin",
+      "status": "not-yet-accepted"
+    },
+    {
+      "id": "G05",
+      "gate": "Approved live publications/messages/connections and native receipts",
+      "owner": "human-approver",
+      "status": "not-yet-accepted"
+    },
+    {
+      "id": "G06",
+      "gate": "Real Papr and personal/team ChatGPT MCP connections separately",
+      "owner": "human-host-user",
+      "status": "not-yet-accepted"
+    },
+    {
+      "id": "G07",
+      "gate": "Mac-off scheduling, healthy inbox monitoring and operational soak",
+      "owner": "workspace-operator",
+      "status": "not-yet-accepted"
+    },
+    {
+      "id": "G08",
+      "gate": "Production encrypted backup and quiesced browser-profile restore drill",
+      "owner": "runtime-operator",
+      "status": "not-yet-accepted"
+    }
+  ],
+  "excluded": [
+    "public SaaS billing",
+    "cloud research/model calls",
+    "automated Zoho sending",
+    "stories/polls/music/collaborators",
+    "native engagement analytics"
+  ],
+  "evidenceRules": "Source tests, Git delivery, deployment, real native receipts and human acceptance are separate. Synthetic month/capacity tests are not a production soak."
+}

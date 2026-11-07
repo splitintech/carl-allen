@@ -88,6 +88,7 @@ function builtInChecks(deps: ExecutionDeps): { before: PreflightCheck[]; after: 
     }
     if (isSocial(action) || action.kind === 'browser.task') {
       if (isSocial(action) && !adapter.social) return { kind: 'review', reason: 'unsupported:social' };
+      if (action.kind === 'social.comment' && !adapter.social?.comment) return {kind:'review',reason:'unsupported:social.comment'};
       if (action.kind === 'social.connect' && !adapter.social?.connect) return { kind: 'review', reason: 'unsupported:social.connect' };
       if (action.kind === 'browser.task' && !adapter.browser) return { kind: 'review', reason: 'unsupported:browser.task' };
       const caps = JSON.parse(acct.capabilities || '{}') as CapabilitySnapshot;
@@ -100,9 +101,9 @@ function builtInChecks(deps: ExecutionDeps): { before: PreflightCheck[]; after: 
       }
       const channel = (JSON.parse(action.payload) as {channel?:string}).channel;
       if (channel && caps.socialChannels && !caps.socialChannels.includes(channel)) return {kind:'review',reason:`unsupported_channel:${channel}`};
-      const flag = action.kind === 'social.publish' ? caps.socialPublish : action.kind === 'social.message' ? caps.socialMessage : action.kind === 'social.connect' ? caps.socialConnect : caps.browserTasks;
+      const flag = (action.kind === 'social.publish' || action.kind === 'social.comment') ? caps.socialPublish : action.kind === 'social.message' ? caps.socialMessage : action.kind === 'social.connect' ? caps.socialConnect : caps.browserTasks;
       if (flag !== true) return { kind: 'review', reason: `capability_not_declared:${action.kind}` };
-      const need: ProviderPurpose = action.kind === 'browser.task' ? (action.purpose ?? 'manual_correspondence') as ProviderPurpose : action.kind === 'social.publish' ? 'social_publishing' : 'social_messaging';
+      const need: ProviderPurpose = action.kind === 'browser.task' ? (action.purpose ?? 'manual_correspondence') as ProviderPurpose : (action.kind === 'social.publish' || action.kind === 'social.comment') ? 'social_publishing' : 'social_messaging';
       const accountPurposes = JSON.parse(acct.purposes) as ProviderPurpose[];
       if (!purposePermitted(need, adapter.purposes, accountPurposes)) {
         return { kind: 'review', reason: `purpose_not_permitted:${need}` };

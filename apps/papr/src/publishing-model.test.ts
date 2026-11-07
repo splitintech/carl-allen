@@ -21,6 +21,8 @@ it('keeps selected time-zone intent and refuses a nonexistent daylight-saving ti
   expect(model.zonedISO('2026-11-10T09:30', 'Asia/Kolkata')).toBe('2026-11-10T04:00:00.000Z');
   expect(() => model.zonedISO('2026-03-08T02:30', 'America/New_York')).toThrow('does not exist');
   expect(() => model.zonedISO('2026-02-31T10:00', 'UTC')).toThrow();
+  expect(() => model.zonedISO('2026-11-01T01:30', 'America/New_York')).toThrow('occurs twice');
+  expect(model.zonedISO('2026-11-01T05:30', 'UTC')).toBe('2026-11-01T05:30:00.000Z');
 });
 it('canonicalizes only the provider selected by the user and blocks endpoint/profile ambiguity', () => {
   expect(identity.canonicalProfile('x', 'https://www.x.com/Owner')).toBe('https://x.com/owner/');

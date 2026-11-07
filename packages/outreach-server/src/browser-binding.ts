@@ -6,6 +6,7 @@ import { ConflictError, ForbiddenError, registerProviderAccount, requireRole, ty
 /** Admin-supplied identity is persisted separately from secrets and cannot rebind an existing profile. */
 export async function registerConfiguredAccount(engine: Engine, ctx: AuthContext, input: RegisterAccountInput & { profileUrl?: string }): Promise<string> {
   requireRole(ctx, 'admin');
+  if(input.publishingProfileUrl || input.profileUrl && /^\/company\//.test(new URL(input.profileUrl).pathname))return registerCompanyAccount(engine,ctx,input);
   let accountInput = input;
   if (input.executionPlacement === 'daytona-browser') {
     const file = process.env.OUTREACH_SOCIAL_ACCOUNT_BINDINGS_FILE ?? process.env.OUTREACH_SOCIAL_BINDINGS_FILE;
@@ -73,4 +74,30 @@ function canonicalProfile(raw: string): { channel: string; url: string } {
   const rule = rules.find((r) => r.hosts.includes(host) && r.path.test(value.pathname));
   if (!rule) throw new ConflictError('Use a canonical LinkedIn, X, Instagram or TikTok profile URL');
   return { channel: rule.channel, url: `${rule.origin}${value.pathname.toLowerCase().replace(/\/?$/, '/')}` };
+}
+
+interface LoginBinding {kind?:string;expectedProfileUrl:string;loginProfileUrl?:string;connectionId?:string;cdpUrl:string;userDataDir:string;publishingProfileUrl?:string}
+async function registerCompanyAccount(engine:Engine,ctx:AuthContext,input:RegisterAccountInput & {profileUrl?:string}):Promise<string>{
+ if(input.executionPlacement!=='daytona-browser'||!input.loginConnectionId)throw new ConflictError('Choose an existing LinkedIn personal login connection for this page');
+ const page=new URL(input.publishingProfileUrl??input.profileUrl??'');
+ if(page.protocol!=='https:'||page.port||!['www.linkedin.com','linkedin.com'].includes(page.hostname)||!/^\/company\/[a-z0-9_-]+\/?$/i.test(page.pathname)||page.search||page.hash||page.username||page.password)throw new ConflictError('Use a canonical LinkedIn company page URL');
+ const url=`https://www.linkedin.com${page.pathname.toLowerCase().replace(/\/?$/,'/')}`;
+ const owner=engine.db.prepare('SELECT id,provider,external_account_id FROM provider_accounts WHERE workspace_id=? AND id=?').get<{id:string;provider:string;external_account_id:string}>(ctx.workspaceId,input.loginConnectionId);
+ if(!owner||owner.provider!==input.provider)throw new ForbiddenError('Login connection is not available in this workspace');
+ const file=process.env.OUTREACH_SOCIAL_ACCOUNT_BINDINGS_FILE??process.env.OUTREACH_SOCIAL_BINDINGS_FILE;
+ if(!file||!existsSync(file))throw new ConflictError('Personal login binding is unavailable');
+ const info=lstatSync(file);if(!info.isFile()||info.isSymbolicLink()||info.mode&0o077)throw new ForbiddenError('Browser bindings must be a regular owner-only file');
+ const lock=`${file}.lock`;let descriptor:number;try{descriptor=openSync(lock,'wx',0o600);}catch{throw new ConflictError('Another account connection is in progress; try again');}
+ try{
+  const bindings=JSON.parse(readFileSync(file,'utf8')) as Record<string,LoginBinding>;const login=bindings[owner.external_account_id];
+  if(!login||login.kind!=='linkedin'||login.publishingProfileUrl||!/^https:\/\/www\.linkedin\.com\/in\//.test(login.expectedProfileUrl))throw new ConflictError('The selected account must be a configured LinkedIn personal login');
+  const connectionId=login.connectionId??owner.external_account_id;const previous=bindings[url];
+  if(previous&&(previous.connectionId!==connectionId||previous.publishingProfileUrl!==url))throw new ConflictError('Company page is already bound to a different login');
+  bindings[url]={...login,connectionId,loginProfileUrl:login.loginProfileUrl??login.expectedProfileUrl,publishingProfileUrl:url};
+  const temp=`${file}.${process.pid}.tmp`;writeFileSync(temp,JSON.stringify(bindings)+'\n',{flag:'wx',mode:0o600});renameSync(temp,file);
+ }finally{closeSync(descriptor);unlinkSync(lock);}
+ const existing=engine.db.prepare('SELECT id FROM provider_accounts WHERE workspace_id=? AND provider=? AND external_account_id=?').get<{id:string}>(ctx.workspaceId,input.provider,url);
+ const id=existing?.id??await registerProviderAccount(engine,ctx,{...input,externalAccountId:url,purposes:input.purposes.filter(p=>p==='social_publishing')});
+ engine.db.prepare('INSERT INTO publishing_targets(id,workspace_id,connection_id,account_id,channel,actor_kind,actor_url) VALUES (?,?,?,?,?,?,?) ON CONFLICT(workspace_id,account_id) DO NOTHING').run(id,ctx.workspaceId,owner.id,id,'linkedin','organization',url);
+ return id;
 }

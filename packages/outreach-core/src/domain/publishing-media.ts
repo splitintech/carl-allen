@@ -1,12 +1,20 @@
-import { closeSync, existsSync, ftruncateSync, fsyncSync, linkSync, openSync, readSync, unlinkSync, writeSync } from 'node:fs';
+import { statfsSync } from 'node:fs';
+import { configuredMediaStore } from './r2-storage';
+import { lstatSync, closeSync, existsSync, ftruncateSync, fsyncSync, linkSync, openSync, readSync, unlinkSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { ulid } from '@splitin/outreach-contracts';
 import { ConflictError, NotFoundError, audit, requireRole, type AuthContext } from './auth';
 import type { DomainEnv } from './env';
 import { PUBLISHING_LIMITS, assetView, type MediaRow, type PublishingAsset } from './publishing-types';
 import { digestMedia, publishingDirectory, signatureMatches, verifyMediaFile } from './publishing-files';
-interface UploadRow { id: string; workspace_id: string; name: string; mime: string; size: number; completed_asset_id: string | null; received: number; next_index: number; created_at: number }
+interface UploadRow { id: string; workspace_id: string; name: string; mime: string; size: number; completed_asset_id: string | null; received: number; next_index: number; created_at: number; expected_sha256:string|null }
 const mimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'];
+export function workspaceMediaQuota(env: DomainEnv, ctx: AuthContext): { quotaBytes: number; storageMode: 'r2' | 'local' } {
+ const row=env.db.prepare('SELECT settings FROM workspaces WHERE id=?').get<{settings:string}>(ctx.workspaceId);
+ const settings=JSON.parse(row?.settings??'{}') as {mediaQuotaBytes?:number};
+ const quota=Number.isSafeInteger(settings.mediaQuotaBytes)&&settings.mediaQuotaBytes!>0?settings.mediaQuotaBytes!:PUBLISHING_LIMITS.workspaceBytes;
+ return {quotaBytes:quota,storageMode:configuredMediaStore()?'r2':'local'};
+}
 export function mediaAsset(env: DomainEnv, ctx: AuthContext, id: string): MediaRow {
   const row = env.db.prepare('SELECT * FROM publishing_media WHERE workspace_id=? AND id=?').get<MediaRow>(ctx.workspaceId, id);
   if (!row) throw new NotFoundError('media asset');
@@ -23,21 +31,32 @@ function upload(env: DomainEnv, ctx: AuthContext, id: string): UploadRow {
   if (env.now() - row.created_at > 24 * 60 * 60 * 1000) throw new ConflictError('Upload expired; cancel it and start again');
   return row;
 }
-export function startPublishingUpload(env: DomainEnv, ctx: AuthContext, input: { name: string; mime: string; size: number }): { uploadId: string; chunkBytes: number } {
+export interface PublishingUploadStatus {uploadId:string;name:string;mime:string;size:number;receivedBytes:number;nextIndex:number;chunkBytes:number;expectedSha256:string|null;state:'uploading'|'local_complete'|'complete';asset?:PublishingAsset}
+export function getPublishingUploadStatus(env:DomainEnv,ctx:AuthContext,id:string):PublishingUploadStatus {
+ requireRole(ctx,'operator');const row=env.db.prepare('SELECT * FROM publishing_uploads WHERE workspace_id=? AND id=?').get<UploadRow>(ctx.workspaceId,id);if(!row)throw new NotFoundError('upload');
+ if(env.now()-row.created_at>24*3600000&&!row.completed_asset_id)throw new ConflictError('Upload expired; cancel it and start again');
+ if(row.completed_asset_id){const asset=mediaAsset(env,ctx,row.completed_asset_id) as MediaRow&{remote_ready?:number};return{uploadId:id,name:row.name,mime:row.mime,size:row.size,receivedBytes:row.received,nextIndex:row.next_index,chunkBytes:PUBLISHING_LIMITS.chunkBytes,expectedSha256:row.expected_sha256,state:configuredMediaStore()&&!asset.remote_ready?'local_complete':'complete',asset:assetView(asset)};}
+ const file=join(publishingDirectory(ctx.workspaceId,true),id);verifyMediaFile(file);if(lstatSync(file).size<row.received)throw new ConflictError('Upload file is truncated; cancel it and start again');
+ return{uploadId:id,name:row.name,mime:row.mime,size:row.size,receivedBytes:row.received,nextIndex:row.next_index,chunkBytes:PUBLISHING_LIMITS.chunkBytes,expectedSha256:row.expected_sha256,state:'uploading'};
+}
+export function startPublishingUpload(env: DomainEnv, ctx: AuthContext, input: { name: string; mime: string; size: number; sha256?:string }): { uploadId: string; chunkBytes: number; nextIndex?:number; receivedBytes?:number } {
   requireRole(ctx, 'operator');
+  const disk=statfsSync(publishingDirectory(ctx.workspaceId)); if(disk.bavail*disk.bsize < input.size+512*1024*1024) throw new ConflictError('Local staging disk is low; finish or cancel uploads before continuing');
   const max = input.mime.startsWith('video/') ? PUBLISHING_LIMITS.videoBytes : PUBLISHING_LIMITS.imageBytes;
   if (!input.name.trim() || input.name.length > 240 || Array.from(input.name).some((c) => c.charCodeAt(0) < 32 || c === '/' || c === '\\') || !mimeTypes.includes(input.mime) || !Number.isSafeInteger(input.size) || input.size < 1 || input.size > max) throw new ConflictError('Unsupported media name, type or size (images up to5MB; videos up to100MB)');
+  if(input.sha256!==undefined&&!/^[a-f0-9]{64}$/.test(input.sha256))throw new ConflictError('Invalid upload checksum');
   expireUploads(env, ctx);
   return env.db.transaction(() => {
-    if (env.db.prepare('SELECT COUNT(*) n FROM publishing_media WHERE workspace_id=?').get<{ n: number }>(ctx.workspaceId)!.n >= 1000) throw new ConflictError('Media library item limit reached');
+    if(input.sha256){const prior=env.db.prepare('SELECT id,name,mime,size FROM publishing_uploads WHERE workspace_id=? AND expected_sha256=? AND completed_asset_id IS NULL ORDER BY created_at DESC LIMIT 1').get<{id:string;name:string;mime:string;size:number}>(ctx.workspaceId,input.sha256);if(prior){if(prior.size!==input.size||prior.mime!==input.mime)throw new ConflictError('Upload checksum belongs to different file metadata');const status=getPublishingUploadStatus(env,ctx,prior.id);return{uploadId:prior.id,chunkBytes:status.chunkBytes,nextIndex:status.nextIndex,receivedBytes:status.receivedBytes};}}
+    if (env.db.prepare('SELECT COUNT(*) n FROM publishing_media WHERE workspace_id=?').get<{ n: number }>(ctx.workspaceId)!.n >= 20000) throw new ConflictError('Media library item limit reached');
     const used = env.db.prepare('SELECT COALESCE(SUM(size),0) n FROM publishing_media WHERE workspace_id=?').get<{ n: number }>(ctx.workspaceId)!.n;
     const pending = env.db.prepare('SELECT COALESCE(SUM(size),0) n,COUNT(*) count FROM publishing_uploads WHERE workspace_id=? AND completed_asset_id IS NULL').get<{ n: number; count: number }>(ctx.workspaceId)!;
-    if (pending.count >= 10 || used + pending.n + input.size > PUBLISHING_LIMITS.workspaceBytes) throw new ConflictError('Workspace media storage limit reached; remove unused files or cancel unfinished uploads');
+    if (pending.count >= 10 || used + pending.n + input.size > workspaceMediaQuota(env,ctx).quotaBytes) throw new ConflictError('Workspace media storage limit reached; remove unused files or cancel unfinished uploads');
     const id = ulid(env.now()); const file = join(publishingDirectory(ctx.workspaceId, true), id);
     closeSync(openSync(file, 'wx', 0o600));
-    try { env.db.prepare('INSERT INTO publishing_uploads(id,workspace_id,name,mime,size,created_at) VALUES (?,?,?,?,?,?)').run(id, ctx.workspaceId, input.name.trim(), input.mime, input.size, env.now()); }
+    try { env.db.prepare('INSERT INTO publishing_uploads(id,workspace_id,name,mime,size,created_at,expected_sha256) VALUES (?,?,?,?,?,?,?)').run(id, ctx.workspaceId, input.name.trim(), input.mime, input.size, env.now(),input.sha256??null); }
     catch (error) { unlinkSync(file); throw error; }
-    return { uploadId: id, chunkBytes: PUBLISHING_LIMITS.chunkBytes };
+    return { uploadId: id, chunkBytes: PUBLISHING_LIMITS.chunkBytes, nextIndex:0,receivedBytes:0 };
   });
 }
 export function appendPublishingChunk(env: DomainEnv, ctx: AuthContext, id: string, index: number, data: string): { receivedBytes: number } {
@@ -69,7 +88,9 @@ export function completePublishingUpload(env: DomainEnv, ctx: AuthContext, id: s
     if (row.received !== row.size) throw new ConflictError('Upload is incomplete');
     const file = join(publishingDirectory(ctx.workspaceId, true), id); verifyMediaFile(file, row.size);
     const { sha256, header } = digestMedia(file);
+    if(row.expected_sha256&&row.expected_sha256!==sha256)throw new ConflictError('Upload checksum differs from the selected file; cancel it and upload the original bytes');
     if (!signatureMatches(row.mime, header)) throw new ConflictError('Media content does not match its declared file type');
+    if (env.db.prepare('SELECT id FROM media_deletions WHERE workspace_id=? AND sha256=?').get(ctx.workspaceId, sha256)) throw new ConflictError('Identical media is awaiting cloud cleanup; retry after cleanup completes');
     const old = env.db.prepare('SELECT * FROM publishing_media WHERE workspace_id=? AND sha256=?').get<MediaRow>(ctx.workspaceId, sha256);
     if (old && (old.size !== row.size || old.mime !== row.mime)) throw new ConflictError('Stored media metadata conflicts with uploaded content');
     const target = join(publishingDirectory(ctx.workspaceId), sha256);
@@ -97,19 +118,26 @@ export function cancelPublishingUpload(env: DomainEnv, ctx: AuthContext, id: str
   const file = join(publishingDirectory(ctx.workspaceId, true), id); if (existsSync(file)) { verifyMediaFile(file); unlinkSync(file); }
   env.db.prepare('DELETE FROM publishing_uploads WHERE workspace_id=? AND id=?').run(ctx.workspaceId, id);
 }
-export function deletePublishingMedia(env: DomainEnv, ctx: AuthContext, id: string): void {
+export function deletePublishingMedia(env: DomainEnv, ctx: AuthContext, id: string, retainLocal = false): void {
   requireRole(ctx, 'operator');
   const row = env.db.transaction(() => {
     const asset = mediaAsset(env, ctx, id);
+    const packages = env.db.prepare('SELECT media_map FROM work_packages WHERE workspace_id=?').all<{ media_map: string }>(ctx.workspaceId);
+    if (packages.some(p => Object.values(JSON.parse(p.media_map) as Record<string, string>).includes(id))) throw new ConflictError('Media is referenced by an imported work package');
     const drafts = env.db.prepare('SELECT posts FROM publishing_drafts WHERE workspace_id=?').all<{ posts: string }>(ctx.workspaceId);
     if (drafts.some((draft) => (JSON.parse(draft.posts) as { mediaIds: string[] }[]).some((p) => p.mediaIds.includes(id)))) throw new ConflictError('Media is referenced by a publishing draft');
     const actions = env.db.prepare('SELECT payload FROM scheduled_actions WHERE workspace_id=?').all<{ payload: string }>(ctx.workspaceId);
     if (actions.some((action) => (JSON.parse(action.payload) as { mediaUrls?: string[] }).mediaUrls?.includes(`outreach-media://${asset.sha256}`))) throw new ConflictError('Media is referenced by a scheduled action');
-    const file = join(publishingDirectory(ctx.workspaceId), asset.sha256); verifyMediaFile(file, asset.size);
+    const file = join(publishingDirectory(ctx.workspaceId), asset.sha256);
+    if (existsSync(file)) verifyMediaFile(file, asset.size);
+    else if (!(asset as MediaRow & { remote_ready?: number }).remote_ready) verifyMediaFile(file, asset.size);
     env.db.prepare('DELETE FROM publishing_media WHERE workspace_id=? AND id=?').run(ctx.workspaceId, id);
     audit(env.db, ctx, env.now(), 'publishing_media', id, 'deleted', {});
     return asset;
   });
+  if (!retainLocal) reclaimPublishingMediaFile(env, ctx, row);
+}
+export function reclaimPublishingMediaFile(env: DomainEnv, ctx: AuthContext, row: { sha256: string; size: number }): void {
   // Reclaim only after metadata deletion committed. A second write transaction
   // serializes this check with concurrent completion of an identical upload.
   env.db.transaction(() => {

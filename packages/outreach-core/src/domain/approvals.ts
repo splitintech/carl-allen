@@ -1,3 +1,4 @@
+import { planVerdict, assertPlanDecision, completePlanDecision, stopPlanExecution } from './cloud-plans';
 import { digestCanonical, ulid, type SqlDatabase } from '@splitin/outreach-contracts';
 import { transitionAction } from '../execution/actions-repo';
 import type { ActionRow, PreflightVerdict } from '../execution/types';
@@ -56,6 +57,7 @@ export function loadApproval(db: SqlDatabase, workspaceId: string, id: string): 
 
 /** Preflight view of an action's approval: only an unexpired approval of this exact content passes. */
 export function approvalVerdict(db: SqlDatabase, action: ActionRow, now: number): PreflightVerdict {
+  const plan = planVerdict(db, action, now); if (plan) return plan;
   if (!action.approval_id) return { kind: 'pass' };
   const approval = loadApproval(db, action.workspace_id, action.approval_id);
   if (!approval) return { kind: 'await_approval', reason: 'approval_missing' };
@@ -93,6 +95,7 @@ export function decideApproval(env: DomainEnv, ctx: AuthContext, input: Decision
   const { db } = env;
   return db.transaction(() => {
     const now = env.now();
+    assertPlanDecision(env, ctx, input.approvalId, input.operationHash);
     const approval = loadApproval(db, ctx.workspaceId, input.approvalId);
     if (!approval) throw new NotFoundError(`approval ${input.approvalId}`);
     if (approval.decision !== 'pending') throw new ConflictError(`approval is ${approval.decision}`);
@@ -106,6 +109,7 @@ export function decideApproval(env: DomainEnv, ctx: AuthContext, input: Decision
     }
     db.prepare('UPDATE approvals SET decision = ?, decided_by = ?, decided_at = ?, reason = ? WHERE id = ?')
       .run(input.decision, ctx.principalId, now, input.reason ?? null, approval.id);
+    completePlanDecision(env, approval.id, input.decision === 'approved');
     const actor = actorOf(ctx);
     const waiting = db
       .prepare(`SELECT * FROM scheduled_actions WHERE approval_id = ? AND state = 'awaiting_approval'`)
@@ -131,6 +135,7 @@ export function revokeApproval(env: DomainEnv, ctx: AuthContext, approvalId: str
     if (!approval) throw new NotFoundError(`approval ${approvalId}`);
     if (approval.decision !== 'approved' && approval.decision !== 'pending') throw new ConflictError(`approval is ${approval.decision}`);
     env.db.prepare(`UPDATE approvals SET decision = 'revoked', reason = ?, decided_at = ? WHERE id = ?`).run(reason, now, approvalId);
+    stopPlanExecution(env,approvalId,'plan_revoked');
     audit(env.db, ctx, now, 'approval', approvalId, 'revoked', { reason });
   });
 }

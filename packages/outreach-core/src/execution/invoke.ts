@@ -19,6 +19,7 @@ export interface ManualPayload {
 }
 export interface SocialPublishPayload {
   readonly channel: string;
+  readonly format?: 'feed' | 'carousel' | 'video' | 'reel';
   readonly text: string;
   readonly mediaUrls?: readonly string[];
 }
@@ -91,9 +92,20 @@ export async function invokeProvider(
         actionId: action.id,
         idempotencyKey: action.idempotency_key,
         channel: payload.channel,
+        ...(payload.format ? {format:payload.format} : {}),
         text: payload.text,
         ...(payload.mediaUrls ? { mediaUrls: payload.mediaUrls } : {}),
       });
+    }
+    if (action.kind === 'social.comment') {
+      if(!adapter.social?.comment)return {kind:'rejected',errorClass:'unsupported',detail:'No first-comment executor'};
+      const payload=JSON.parse(action.payload) as {channel:string;text:string;_dependsOn:string};
+      const parent=deps.db.prepare("SELECT aa.receipt FROM action_attempts aa JOIN scheduled_actions a ON a.id=aa.action_id WHERE a.workspace_id=? AND a.id=? AND a.state='succeeded' AND aa.outcome='succeeded' ORDER BY aa.attempt_no DESC LIMIT 1").get<{receipt:string}>(action.workspace_id,payload._dependsOn);
+      if(!parent)return {kind:'rejected',errorClass:'policy_blocked',detail:'Confirmed publication receipt required'};
+      const receipt=JSON.parse(parent.receipt) as {providerMessageId:string;raw?:{url?:string}};
+      const targetUrl=receipt.raw?.url??(receipt.providerMessageId.startsWith('https://')?receipt.providerMessageId:payload.channel==='linkedin'&&receipt.providerMessageId.startsWith('urn:li:')?'https://www.linkedin.com/feed/update/'+receipt.providerMessageId:undefined);
+      if(!targetUrl)return {kind:'rejected',errorClass:'policy_blocked',detail:'Publication has no confirmed native URL; review first comment'};
+      return adapter.social.comment(ctx,{actionId:action.id,idempotencyKey:action.idempotency_key,channel:payload.channel,text:payload.text,targetUrl});
     }
     if (action.kind === 'social.connect') {
       if (!adapter.social?.connect) return { kind: 'rejected', errorClass: 'unsupported', detail: 'no social connect port' };

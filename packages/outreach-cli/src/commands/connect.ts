@@ -1,3 +1,4 @@
+import { authorizeZoho, type ZohoRegion } from '@splitin/outreach-provider-email-zoho';
 import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { authorizeGoogle, GMAIL_SCOPES } from '@splitin/outreach-provider-email-gmail';
@@ -19,6 +20,21 @@ const nextStep = (provider: string, address: string, path: string) =>
   `--sender-name "<your name>" --postal "<postal address>" --purposes <purposes> --secret file:${path}`;
 
 export const connectCommands: readonly Command[] = [
+ {
+  name:'account connect zoho',
+  usage:'outreach account connect zoho --client-id <id> --client-secret-env <ENV_NAME> [--region us|eu|in|au|jp|ca|sa|cn] [--out <path>]',
+  summary:'Connect Zoho inbox and human-reviewed drafts. Does not enable automated sending.',
+  flags:{'client-id':'string','client-secret-env':'string',region:'string',out:'string'},
+  async run({flags,out,env,notice,openUrl}){
+    const secret=env[required(flags,'client-secret-env')];if(!secret)throw new UsageError('Zoho client secret environment variable is empty');
+    const region=flag(flags,'region')??'us';
+    if(!['us','eu','in','au','jp','ca','sa','cn'].includes(region))throw new UsageError('Unsupported Zoho region');
+    const result=await authorizeZoho({clientId:required(flags,'client-id'),clientSecret:secret,region:region as ZohoRegion,onUrl:(url)=>{notice('Open this authorization link on this machine: '+url);openUrl?.(url);}});
+    const path=saveGrant(flags,env,'zoho',result.emailAddress,result.grant);
+    out.result({connected:result.emailAddress,secretRef:'file:'+path,purposes:['manual_correspondence'],next:nextStep('zoho',result.emailAddress,path)});
+  }
+ },
+
   {
     name: 'account connect gmail',
     usage: 'outreach account connect gmail --client-id <id> --client-secret-env <ENV_NAME> [--login-hint <address>] [--out <path>]',

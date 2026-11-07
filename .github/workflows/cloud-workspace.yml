@@ -1,0 +1,27 @@
+name: cloud-workspace
+on:
+  pull_request:
+    paths: ['deploy/cloudflare/**', 'scripts/cloud-*.mjs', 'packages/**', 'apps/papr/**', 'package*.json', '.github/workflows/cloud-workspace.yml']
+  push:
+    branches: [main]
+    paths: ['deploy/cloudflare/**', 'scripts/cloud-*.mjs', 'packages/**', 'apps/papr/**', 'package*.json', '.github/workflows/cloud-workspace.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run studio:build
+      - run: npm --prefix deploy/cloudflare ci
+      - run: npm run test:cloud
+      - run: npm --prefix deploy/cloudflare run check
+        env:
+          WRANGLER_SEND_METRICS: 'false'

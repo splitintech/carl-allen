@@ -43,7 +43,8 @@
     "@splitin/outreach-core": "0.0.0",
     "@splitin/outreach-import": "0.0.0",
     "hono": "^4.13.9",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@splitin/outreach-mcp": "0.0.0"
   },
   "devDependencies": {
     "@splitin/outreach-fakes": "0.0.0",

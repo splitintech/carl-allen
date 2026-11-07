@@ -1,3 +1,4 @@
+import { publishingFormatIssues } from '@splitin/outreach-contracts';
 import type { ProviderContext, SendResult, SocialConnectInput, SocialHealth, SocialMessageInput, SocialPublishInput } from '@splitin/outreach-contracts';
 import type { Page, Response } from 'playwright';
 import type { SocialSession } from './session';
@@ -11,17 +12,17 @@ export interface LinkedInOptions {
 }
 const IDENTITY = '.profile-card a[href*="/in/"], a[data-control-name="identity_welcome_message"], a[data-view-name="identity-module"]';
 function timeout(options: LinkedInOptions): number { return options.confirmationTimeoutMs ?? 15_000; }
-async function ready(page: Page, binding: AccountBinding, options: LinkedInOptions): Promise<void> {
+export async function linkedInReady(page: Page, binding: AccountBinding, options: LinkedInOptions): Promise<void> {
   await page.goto(`${options.origin}/feed/`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   if (new URL(page.url()).origin !== options.origin) throw new Error('Browser left the configured social origin');
   if (/\/(login|checkpoint|authwall|challenge)/i.test(new URL(page.url()).pathname)) throw new Error('needs_reauth: checkpoint or logged out');
   const identity = page.locator(binding.identitySelector ?? IDENTITY).first();
   const actual = await identity.getAttribute('href', { timeout: timeout(options) });
-  if (!actual || !binding.expectedProfileUrl || canonicalProfile(actual) !== canonicalProfile(binding.expectedProfileUrl)) throw new Error('needs_reauth: signed-in identity does not match account binding');
+  if (!actual || !binding.expectedProfileUrl || canonicalProfile(actual) !== canonicalProfile((binding.loginProfileUrl ?? binding.expectedProfileUrl))) throw new Error('needs_reauth: signed-in identity does not match account binding');
 }
 export async function linkedInHealth(session: SocialSession, ctx: ProviderContext, binding: AccountBinding, options: LinkedInOptions): Promise<SocialHealth> {
   try {
-    await session.withPage(ctx.signal, (page) => ready(page, binding, options));
+    await session.withPage(ctx.signal, (page) => linkedInReady(page, binding, options));
     return { status: 'ok', reconnectNeeded: false };
   } catch (error) {
     return { status: 'reauth_required', reconnectNeeded: true, detail: `needs_reauth: ${(error as Error).message}`.slice(0, 300) };
@@ -53,11 +54,11 @@ async function effect(
   try {
     return await session.withPage(ctx.signal, async (page) => {
       activePage = page;
-      await ready(page, binding, options);
+      await linkedInReady(page, binding, options);
       authenticated = true;
       const id = await action(page, () => { ctx.signal.throwIfAborted(); if (new URL(page.url()).origin !== options.origin) throw new Error('Browser left the configured social origin'); crossed = true; });
       if (new URL(page.url()).origin !== options.origin) throw new Error('Social confirmation origin changed');
-      return { kind: 'accepted', receipt: { providerMessageId: id, acceptedAt: ctx.now() } };
+      return { kind: 'accepted', receipt: { providerMessageId: id, acceptedAt: ctx.now(), ...(/^urn:li:activity:\d+$/.test(id) ? { raw: { url: `https://www.linkedin.com/feed/update/${id}/` } } : {}) } };
     });
   } catch (error) {
     const detail = (error as Error).message.slice(0, 300);
@@ -93,19 +94,24 @@ export async function linkedInPublish(session: SocialSession, ctx: ProviderConte
     try { files = await loadMedia(ctx, input.mediaUrls, options.media); }
     catch (error) { return rejected((error as Error).message); }
   }
+  const formatIssues=publishingFormatIssues('linkedin',input.format,files.map(f=>f.mimeType));if(formatIssues.length)return rejected(formatIssues.join('; '));
   if (!input.text.trim() && !files.length) return rejected('A caption or uploaded media is required');
   if (files.some((f) => f.mimeType.startsWith('video/') && f.mimeType !== 'video/mp4')) return rejected('Publishing requires MP4 video; convert WebM to MP4 before scheduling');
-  if (Array.from(input.text).length > 3000 || files.length > 4 || (files.some((f) => f.mimeType.startsWith('video/')) && files.length !== 1)) return rejected('LinkedIn supports at most four images or one video and 3000 characters');
+  if (Array.from(input.text).length > 3000 || files.length > 20 || (files.some((f) => f.mimeType.startsWith('video/')) && files.length !== 1)) return rejected('LinkedIn supports at most twenty images or one video and 3000 characters');
   return effect(session, ctx, binding, options, async (page, boundary) => {
+    if (binding.publishingProfileUrl) { const profile=canonicalPage(binding.publishingProfileUrl); await page.goto(`${options.origin}${new URL(profile).pathname}admin/page-posts/published/`,{waitUntil:'domcontentloaded'}); if(new URL(page.url()).origin!==options.origin)throw new Error('Company page left its bound origin'); }
     const selector = 'article[data-urn], .feed-shared-update-v2[data-urn]';
     const before = await previousIds(page, selector, 'data-urn');
     await page.locator('button.share-box-feed-entry__trigger, button:has-text("Start a post")').first().click();
+    await publishingActor(page,binding,options);
     await page.locator('.ql-editor, div[role="textbox"][contenteditable="true"]').first().fill(input.text);
     if (files[0]?.mimeType.startsWith('video/')) await attachVideo(page, files[0], mediaUploadTimeout('video', options.confirmationTimeoutMs));
     else if (files.length) await attachImages(page, files, mediaUploadTimeout('image', options.confirmationTimeoutMs));
     boundary();
     await page.locator('button.share-actions__primary-action').first().click();
-    return confirmedId(page, selector, input.text, 'data-urn', options, before);
+    const id=await confirmedId(page, selector, input.text, 'data-urn', options, before);
+    if(binding.publishingProfileUrl){const authors=await page.locator(selector).evaluateAll((nodes,receipt)=>nodes.filter(n=>n.getAttribute('data-urn')===receipt).map(n=>n.querySelector('a[href*="/company/"]')?.getAttribute('href')),id);if(!authors.some(h=>h&&canonicalPage(h)===canonicalPage(binding.publishingProfileUrl!)))throw new Error('Publication receipt author does not match the approved company page');}
+    return id;
   });
 }
 export async function linkedInMessage(session: SocialSession, ctx: ProviderContext, binding: AccountBinding, options: LinkedInOptions, input: SocialMessageInput): Promise<SendResult> {
@@ -166,4 +172,27 @@ export async function linkedInConnect(session: SocialSession, ctx: ProviderConte
     if (!id) throw new Error('Invitation response lacks a native receipt identifier');
     return id;
   });
+}
+
+/** Connection state is read-only; Message visibility alone never proves a connection. */
+export async function linkedInConnectionStatus(session: SocialSession, ctx: ProviderContext, binding: AccountBinding, options: LinkedInOptions, targetUrl: string): Promise<'connected'|'pending'|'none'|'unknown'> {
+  const url = target({channel:'linkedin',targetUrl},options);
+  return session.withPage(ctx.signal,async page=>{
+    await linkedInReady(page,binding,options);await page.goto(url,{waitUntil:'domcontentloaded'});
+    if(new URL(page.url()).origin!==options.origin||/checkpoint|authwall|login|challenge/.test(new URL(page.url()).pathname))throw new Error('Connection monitoring requires reconnect');
+    if(await page.getByRole('button',{name:/^Pending$|Withdraw invitation/i}).count())return'pending';
+    if(await page.locator('.distance-badge,.dist-value,[data-connection-degree]').filter({hasText:/^1st$/}).count())return'connected';
+    if(await page.getByRole('button',{name:/^Connect$/}).count())return'none';return'unknown';
+  });
+}
+function canonicalPage(value:string):string{
+  const p=new URL(value);if(p.protocol!=='https:'||p.port||p.username||p.password||!['www.linkedin.com','linkedin.com'].includes(p.hostname)||!/^\/company\/[a-z0-9_-]+\/?$/i.test(p.pathname)||p.search||p.hash)throw new Error('Publishing page requires a canonical LinkedIn company URL');
+  return `https://www.linkedin.com${p.pathname.toLowerCase().replace(/\/?$/,'/')}`;
+}
+async function publishingActor(page:Page,binding:AccountBinding,options:LinkedInOptions):Promise<void>{
+  if(!binding.publishingProfileUrl)return;
+  const target=canonicalPage(binding.publishingProfileUrl);
+  const actor=page.locator(binding.publishingIdentitySelector??'[data-publishing-identity], [data-view-name="share-creation-actor"] a[href*="/company/"]').first();
+  const href=await actor.getAttribute('href',{timeout:timeout(options)})??await actor.getAttribute('data-publishing-identity');
+  if(!href||canonicalPage(href)!==target)throw new Error('Selected composer publishing identity does not match the approved company page');
 }

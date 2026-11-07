@@ -1,6 +1,10 @@
+import { socialComment } from './comments';
+import { readConversations } from './conversations';
+import { instagramMessage } from './instagram-message';
+import { withLoginConnection } from './pool';
 import { digestCanonical } from '@splitin/outreach-contracts';
 import type { BrowserTaskInput, CapabilitySnapshot, ProviderAdapter, ProviderContext, ProviderPurpose, SendResult, SocialHealth } from '@splitin/outreach-contracts';
-import { linkedInConnect, linkedInHealth, linkedInMessage, linkedInPublish, type LinkedInOptions } from './linkedin';
+import { linkedInConnect, linkedInConnectionStatus, linkedInHealth, linkedInMessage, linkedInPublish, type LinkedInOptions } from './linkedin';
 import { createSocialSession, type SocialSession } from './session';
 import { accountBinding, assertPlacement, type AccountBinding, type RuntimePlacement } from './runtime';
 import type { MediaPolicy } from './media';
@@ -37,7 +41,7 @@ export function socialBrowserAdapter(options: SocialBrowserAdapterOptions): Prov
       const endpoint = new URL(value.cdpUrl);
       if (endpoint.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) throw new Error('CDP must use loopback HTTP inside the attested sandbox');
       for (const [externalId, other] of Object.entries(currentBindings())) {
-        if (externalId !== ctx.account.externalAccountId && other.cdpUrl === value.cdpUrl) throw new Error('Each account requires a unique CDP profile binding');
+        if (externalId !== ctx.account.externalAccountId && other.cdpUrl === value.cdpUrl && (!other.connectionId || other.connectionId !== value.connectionId)) throw new Error('Each account requires a unique CDP profile binding');
       }
     }
     if (value.pageFactory && options.runtime.kind !== 'fixture') throw new Error('Page injection is restricted to fixture runtime');
@@ -55,16 +59,18 @@ export function socialBrowserAdapter(options: SocialBrowserAdapterOptions): Prov
   const health = async (ctx: ProviderContext): Promise<SocialHealth> => {
     try {
       const value = binding(ctx);
+      return await withLoginConnection(options.runtime, ctx, value, async () => {
       const active = await session(ctx, value);
       if (value.kind === 'browser') return await browserRecipeHealth(active, ctx, value, [...recipes.values()].filter(recipe => Boolean(value.recipeIdentities?.[recipe.id])));
       const channel = accountChannel(value);
       return channel === 'linkedin' ? await linkedInHealth(active, ctx, value, linkedin) : await networkHealth(active, ctx, value, channel, { ...linkedin, origin: options.origin ?? PLATFORM_ORIGINS[channel] });
+      });
     }
-    catch (error) { return { status: 'reauth_required', reconnectNeeded: true, detail: (error as Error).message }; }
+    catch (error) { const detail=(error as Error).message;return /busy|capacity/.test(detail)?{status:'degraded',reconnectNeeded:false,detail}:{ status: 'reauth_required', reconnectNeeded: true, detail }; }
   };
   const execute = async (ctx: ProviderContext, fn: (active: SocialSession, value: AccountBinding) => Promise<SendResult>): Promise<SendResult> => {
-    try { const value = binding(ctx); return await fn(await session(ctx, value), value); }
-    catch (error) { return { kind: 'rejected', errorClass: 'auth_expired', detail: (error as Error).message }; }
+    try { const value = binding(ctx); return await withLoginConnection(options.runtime, ctx, value, async () => fn(await session(ctx, value), value)); }
+    catch (error) { const detail=(error as Error).message; return { kind: 'rejected', errorClass: /busy|capacity/.test(detail) ? 'transient' : 'auth_expired', detail }; }
   };
   return {
     name, purposes,
@@ -78,7 +84,7 @@ export function socialBrowserAdapter(options: SocialBrowserAdapterOptions): Prov
           provider: name, send: false, replyInThread: false, customHeaders: false,
           externalIdempotency: false, inboundWebhook: false, mailboxPolling: false,
           reconcileBySentSearch: false, maxRecipientsPerMessage: 1, discoveredAt: ctx.now(),
-          socialPublish: Boolean(channel), socialMessage: channel === 'linkedin', socialConnect: channel === 'linkedin', socialChannels: channel ? [channel] : [],
+          socialPublish: Boolean(channel), socialMessage: (channel === 'linkedin' && !account.publishingProfileUrl) || channel === 'instagram', socialConnect: channel === 'linkedin' && !account.publishingProfileUrl, socialChannels: channel ? [channel] : [],
           socialMediaTypes: channel === 'tiktok' ? ['video'] : channel ? ['image', 'video'] : [],
           browserTasks: eligibleRecipes.length > 0, browserRecipeHashes: Object.fromEntries(eligibleRecipes.map(([id, recipe]) => [id, digestCanonical(recipe)])), executionPlacement: 'daytona-browser',
         };
@@ -91,8 +97,24 @@ export function socialBrowserAdapter(options: SocialBrowserAdapterOptions): Prov
         const channel = accountChannel(value);
         return channel === 'linkedin' ? linkedInPublish(active, ctx, value, linkedin, input) : networkPublish(active, ctx, value, { ...linkedin, origin: options.origin ?? PLATFORM_ORIGINS[channel] }, input);
       }),
-      message: (ctx, input) => execute(ctx, (active, value) => value.kind === 'browser' || accountChannel(value) !== 'linkedin' ? Promise.resolve({ kind: 'rejected', errorClass: 'unsupported', detail: 'Only LinkedIn accounts have messaging capability' }) : linkedInMessage(active, ctx, value, linkedin, input)),
-      connect: (ctx, input) => execute(ctx, (active, value) => value.kind === 'browser' || accountChannel(value) !== 'linkedin' ? Promise.resolve({ kind: 'rejected', errorClass: 'unsupported', detail: 'Only LinkedIn accounts have invitation capability' }) : linkedInConnect(active, ctx, value, linkedin, input)),
+      message: (ctx, input) => execute(ctx,(active,value)=> {
+        const channel=value.kind==='browser'?'browser':accountChannel(value);
+        if(value.publishingProfileUrl)return Promise.resolve({kind:'rejected',errorClass:'unsupported',detail:'Company-page messaging is not supported'});
+        if(channel==='linkedin')return linkedInMessage(active,ctx,value,linkedin,input);
+        if(channel==='instagram')return instagramMessage(active,ctx,value,{...linkedin,origin:options.origin??PLATFORM_ORIGINS.instagram},input);
+        return Promise.resolve({kind:'rejected',errorClass:'unsupported',detail:'Messaging is unavailable for this platform'});
+      }),
+      comment: (ctx,input)=>execute(ctx,(active,value)=>socialComment(active,ctx,value,{...linkedin,origin:options.origin??PLATFORM_ORIGINS[input.channel as keyof typeof PLATFORM_ORIGINS]??origin},input)),
+      conversations: async (ctx,cursor)=> {
+        const value=binding(ctx);const channel=value.kind==='browser'?'browser':accountChannel(value);
+        if(value.publishingProfileUrl||!['linkedin','instagram'].includes(channel))throw new Error('Inbox monitoring is unavailable for this account');
+        return withLoginConnection(options.runtime,ctx,value,async()=>readConversations(await session(ctx,value),ctx,value,channel as 'linkedin'|'instagram',{...linkedin,origin:options.origin??PLATFORM_ORIGINS[channel as 'linkedin'|'instagram']},cursor));
+      },
+      connectionStatus: async(ctx,targetUrl)=> {
+        const value=binding(ctx);if(value.kind==='browser'||accountChannel(value)!=='linkedin'||value.publishingProfileUrl)return'unknown';
+        return withLoginConnection(options.runtime,ctx,value,async()=>linkedInConnectionStatus(await session(ctx,value),ctx,value,linkedin,targetUrl));
+      },
+      connect: (ctx, input) => execute(ctx, (active, value) => value.kind === 'browser' || value.publishingProfileUrl || accountChannel(value) !== 'linkedin' ? Promise.resolve({ kind: 'rejected', errorClass: 'unsupported', detail: 'Only LinkedIn accounts have invitation capability' }) : linkedInConnect(active, ctx, value, linkedin, input)),
       health,
     },
     ...(recipes.size ? { browser: { run: (ctx: ProviderContext, input: BrowserTaskInput) => execute(ctx, (active, value) => {

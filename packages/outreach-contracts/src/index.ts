@@ -7,3 +7,7 @@ export * from './crypto';
 export * from './sql';
 export * from './audit';
 export * from './mime';
+
+export * from './work-package';
+
+export * from './publishing';

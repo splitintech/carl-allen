@@ -1,7 +1,11 @@
-import { ulid, type CapabilitySnapshot } from '@splitin/outreach-contracts';
+import { enqueueAction } from '../execution/enqueue';
+import { actorOf } from './auth';
+import { createPlanAuthorization, SCHEDULE_HORIZON_MS } from './cloud-plans';
+import type { ActionRow } from '../execution/types';
+import { publishingFormatIssues, ulid, type CapabilitySnapshot } from '@splitin/outreach-contracts';
 import { ConflictError, NotFoundError, audit, requireRole, type AuthContext } from './auth';
 import type { DomainEnv } from './env';
-import { PolicySchema } from './playbook';
+import { newPlanPolicy } from './workspace-policy';
 import { scheduleAction, cancelScheduledAction } from './scheduled-management';
 import { mediaAsset } from './publishing-media';
 import { PUBLISHING_LIMITS, PublishingDraftInput, type PublishingDraft } from './publishing-types';
@@ -16,7 +20,7 @@ export function listPublishingDrafts(env: DomainEnv, ctx: AuthContext): Publishi
 }
 function validateDraft(env: DomainEnv, ctx: AuthContext, input: PublishingDraftInput): void {
   try { new Intl.DateTimeFormat('en', { timeZone: input.timezone }).format(); } catch { throw new ConflictError('Invalid time zone'); }
-  if (new Set(input.posts.map((p) => p.channel)).size !== input.posts.length) throw new ConflictError('Choose each platform once');
+  if (new Set(input.posts.map((p) => p.targetId ?? (p.channel + ':' + (p.accountId ?? '')))).size !== input.posts.length) throw new ConflictError('Each publishing target needs its own stable identity');
   for (const post of input.posts) {
     if (new Set(post.mediaIds).size !== post.mediaIds.length) throw new ConflictError('A media asset can appear only once per post');
     for (const id of post.mediaIds) mediaAsset(env, ctx, id);
@@ -36,7 +40,7 @@ export function savePublishingDraft(env: DomainEnv, ctx: AuthContext, value: Pub
   return env.db.transaction(() => {
     const old = input.id ? getPublishingDraft(env, ctx, input.id) : null; const now = Math.max(env.now(), old ? old.updatedAt + 1 : 0);
     if (old) clearDraftActions(env, ctx, old);
-    if (!old && env.db.prepare('SELECT COUNT(*) n FROM publishing_drafts WHERE workspace_id=?').get<{ n: number }>(ctx.workspaceId)!.n >= 1000) throw new ConflictError('Publishing draft limit reached');
+    if (!old && env.db.prepare("SELECT COUNT(*) n FROM publishing_drafts WHERE workspace_id=? AND status IN ('draft','blocked')").get<{ n: number }>(ctx.workspaceId)!.n >= 10000) throw new ConflictError('Active draft capacity reached');
     const id = old?.id ?? ulid(now);
     if (old) env.db.prepare("UPDATE publishing_drafts SET name=?,timezone=?,scheduled_for=?,posts=?,status='draft',action_ids='[]',blocked='[]',revision=revision+1,updated_at=? WHERE workspace_id=? AND id=?").run(input.name, input.timezone, input.scheduledFor, JSON.stringify(input.posts), now, ctx.workspaceId, id);
     else env.db.prepare('INSERT INTO publishing_drafts(id,workspace_id,name,timezone,scheduled_for,posts,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run(id, ctx.workspaceId, input.name, input.timezone, input.scheduledFor, JSON.stringify(input.posts), now, now);
@@ -47,14 +51,18 @@ export function savePublishingDraft(env: DomainEnv, ctx: AuthContext, value: Pub
 export function deletePublishingDraft(env: DomainEnv, ctx: AuthContext, id: string): void {
   requireRole(ctx, 'operator'); env.db.transaction(() => { const draft = getPublishingDraft(env, ctx, id); clearDraftActions(env, ctx, draft); env.db.prepare('DELETE FROM publishing_drafts WHERE workspace_id=? AND id=?').run(ctx.workspaceId, id); audit(env.db, ctx, env.now(), 'publishing_draft', id, 'deleted', {}); });
 }
-function postIssues(env: DomainEnv, ctx: AuthContext, draft: PublishingDraft): { channel: string; reason: string }[] {
+export function postIssues(env: DomainEnv, ctx: AuthContext, draft: PublishingDraft): { channel: string; reason: string }[] {
   const issues: { channel: string; reason: string }[] = [];
   for (const post of draft.posts) {
     const add = (reason: string) => issues.push({ channel: post.channel, reason });
     const limits = PUBLISHING_LIMITS.platforms[post.channel];
+    if(post.firstComment && !['linkedin','instagram'].includes(post.channel))add('First comments are supported only on LinkedIn and Instagram');
+    if(post.firstComment && !env.adapters.get(env.db.prepare('SELECT provider FROM provider_accounts WHERE id=?').get<{provider:string}>(post.accountId??'')?.provider??'')?.social?.comment) add('First comments are unavailable for this account');
     if (Array.from(post.text).length > limits.text) add(`Caption exceeds${limits.text} characters`);
     if (!post.text.trim() && !post.mediaIds.length) add('Add a caption or media');
+    const requested = Date.parse(post.scheduledFor ?? draft.scheduledFor); if (!Number.isFinite(requested) || requested < env.now() || requested > env.now() + SCHEDULE_HORIZON_MS) add('Choose a future date within 90 days');
     const media = post.mediaIds.map((id) => mediaAsset(env, ctx, id)); const images = media.filter((m) => m.mime.startsWith('image/')).length; const videos = media.length - images;
+    for(const problem of publishingFormatIssues(post.channel,post.format,media.map(m=>m.mime)))add(problem);
     if (media.some((m) => m.mime.startsWith('video/') && m.mime !== 'video/mp4')) add('Convert videos to MP4 before publishing');
     if (post.channel === 'instagram' && media.some((m) => m.mime === 'image/webp')) add('Convert Instagram images to JPEG or PNG before publishing');
     if (images > limits.images || videos > limits.videos || (images > 0 && videos > 0)) add('This post exceeds the supported media combination for this platform');
@@ -72,20 +80,27 @@ function postIssues(env: DomainEnv, ctx: AuthContext, draft: PublishingDraft): {
   if (Date.parse(draft.scheduledFor) < env.now()) issues.push({ channel: 'all', reason: 'Choose a future date and time' });
   return issues;
 }
-export function submitPublishingDraft(env: DomainEnv, ctx: AuthContext, id: string): { draft: PublishingDraft; actions: ReturnType<typeof publishingActions>; blocked: PublishingDraft['blocked'] } {
+export function submitPublishingDraft(env: DomainEnv, ctx: AuthContext, id: string, options: { planApproval?: boolean } = { planApproval: true }): { draft: PublishingDraft; actions: ReturnType<typeof publishingActions>; blocked: PublishingDraft['blocked']; authorizationId?: string; operationHash?: string } {
   requireRole(ctx, 'operator'); return env.db.transaction(() => {
     const draft = getPublishingDraft(env, ctx, id);
-    if (draft.actionIds.length) return { draft, actions: publishingActions(env, ctx).filter((a) => draft.actionIds.includes(a.id)), blocked: draft.blocked };
+    if (draft.actionIds.length) { const authorization = env.db.prepare('SELECT id AS authorizationId,manifest_hash AS operationHash FROM plan_authorizations WHERE subject_id=? ORDER BY created_at DESC LIMIT 1').get<{authorizationId:string;operationHash:string}>(id); return { ...authorization, draft, actions: publishingActions(env, ctx).filter((a) => draft.actionIds.includes(a.id)), blocked: draft.blocked }; }
     const blocked = postIssues(env, ctx, draft);
+    if(options.planApproval===false && draft.posts.some(p=>p.firstComment))blocked.push({channel:'all',reason:'First comments require the publishing-plan review workflow'});
     if (blocked.length) { env.db.prepare("UPDATE publishing_drafts SET status='blocked',blocked=?,updated_at=? WHERE id=?").run(JSON.stringify(blocked), env.now(), id); return { draft: getPublishingDraft(env, ctx, id), actions: [], blocked }; }
-    const actionIds = draft.posts.map((post) => scheduleAction(env, ctx, { kind: 'social.publish', providerAccountId: post.accountId!, payload: { channel: post.channel, text: post.text, mediaUrls: post.mediaIds.map((assetId) => `outreach-media://${mediaAsset(env, ctx, assetId).sha256}`), publishingDraftId: draft.id, mediaIds: post.mediaIds }, dueAt: Date.parse(draft.scheduledFor), approval: 'always', idempotencyKey: `publishing:${draft.id}:${draft.revision}:${post.channel}`, policy: PolicySchema.parse({ approval: 'every_action', unsubscribe: 'reply', requirePostalAddress: false, window: { timezone: draft.timezone, fallback: draft.timezone, days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], start: '00:00', end: '23:59' }, limits: { accountPerDay: 10, channelPerDay: 10 } }) }).actionId);
+    const actionIds = draft.posts.map((post) => scheduleAction(env, ctx, { kind: 'social.publish', providerAccountId: post.accountId!, payload: { channel: post.channel, text: post.text, tags: post.tags ?? [], ...(post.format ? {format: post.format} : {}), mediaUrls: post.mediaIds.map((assetId) => `outreach-media://${mediaAsset(env, ctx, assetId).sha256}`), publishingDraftId: draft.id, ...(post.targetId ? {targetId: post.targetId} : {}), mediaIds: post.mediaIds }, dueAt: Date.parse(post.scheduledFor ?? draft.scheduledFor), approval: 'always', idempotencyKey: `publishing:${draft.id}:${draft.revision}:${post.targetId ?? post.channel + ':' + post.accountId}`, policy: newPlanPolicy(env,ctx,draft.timezone) }).actionId);
+    for(let index=0; index<draft.posts.length; index++) { const post=draft.posts[index]!; if(!post.firstComment)continue;
+      const parent=env.db.prepare('SELECT * FROM scheduled_actions WHERE id=?').get<ActionRow>(actionIds[index]!)!;
+      actionIds.push(enqueueAction(env.db,{workspaceId:ctx.workspaceId,kind:'social.comment',providerAccountId:post.accountId!,purpose:'social_publishing',payload:{channel:post.channel,text:post.firstComment,_dependsOn:parent.id,_policy:JSON.parse(parent.payload)._policy,publishingDraftId:draft.id},idempotencyKey:'comment:'+parent.id,dueAt:parent.due_at,awaitingApproval:true},actorOf(ctx),env.now()).action.id);
+    }
+    const rows = actionIds.map(actionId => { if(options.planApproval!==false)env.db.prepare('UPDATE scheduled_actions SET not_after=NULL WHERE id=?').run(actionId); return env.db.prepare('SELECT * FROM scheduled_actions WHERE id=?').get<ActionRow>(actionId)!; });
+    const authorization = options.planApproval===false ? {} : createPlanAuthorization(env, ctx, draft.id, rows, { draftId: draft.id, revision: draft.revision, posts: draft.posts, timezone: draft.timezone });
     env.db.prepare("UPDATE publishing_drafts SET status='queued',action_ids=?,blocked='[]',updated_at=? WHERE id=?").run(JSON.stringify(actionIds), env.now(), id);
     audit(env.db, ctx, env.now(), 'publishing_draft', id, 'queued_for_approval', { actionIds });
-    return { draft: getPublishingDraft(env, ctx, id), actions: publishingActions(env, ctx).filter((a) => actionIds.includes(a.id)), blocked: [] };
+    return { draft: getPublishingDraft(env, ctx, id), actions: publishingActions(env, ctx).filter((a) => actionIds.includes(a.id)), blocked: [], ...authorization };
   });
 }
-export function publishingActions(env: DomainEnv, ctx: AuthContext): { id: string; kind: string; state: string; channel: string; text: string; dueAt: number; providerAccountId: string | null; approvalId: string | null; operationHash: string; mediaIds: string[]; draftId: string | null; reason: string | null }[] {
+export function publishingActions(env: DomainEnv, ctx: AuthContext): { id: string; kind: string; state: string; channel: string; text: string; dueAt: number; providerAccountId: string | null; approvalId: string | null; authorizationId: string | null; authorizationHash: string | null; operationHash: string; mediaIds: string[]; draftId: string | null; reason: string | null; tags: string[] }[] {
   requireRole(ctx, 'viewer');
-  const rows = env.db.prepare("SELECT id,kind,state,payload,due_at,provider_account_id,approval_id,content_hash,state_reason FROM scheduled_actions WHERE workspace_id=? AND kind='social.publish' ORDER BY due_at DESC LIMIT 1000").all<{ id: string; kind: string; state: string; payload: string; due_at: number; provider_account_id: string | null; approval_id: string | null; content_hash: string; state_reason: string | null }>(ctx.workspaceId);
-  return rows.map((r) => { const payload = JSON.parse(r.payload) as { channel: string; text: string; mediaIds?: string[]; publishingDraftId?: string }; return { id: r.id, kind: r.kind, state: r.state, channel: payload.channel, text: payload.text, dueAt: r.due_at, providerAccountId: r.provider_account_id, approvalId: r.approval_id, operationHash: r.content_hash, mediaIds: payload.mediaIds ?? [], draftId: payload.publishingDraftId ?? null, reason: r.state_reason }; });
+  const rows = env.db.prepare("SELECT id,kind,state,payload,due_at,provider_account_id,approval_id,content_hash,state_reason,(SELECT id FROM plan_authorizations WHERE id=scheduled_actions.approval_id) AS authorization_id,(SELECT manifest_hash FROM plan_authorizations WHERE id=scheduled_actions.approval_id) AS authorization_hash FROM scheduled_actions WHERE workspace_id=? AND kind='social.publish' ORDER BY due_at DESC").all<{ id: string; kind: string; state: string; payload: string; due_at: number; provider_account_id: string | null; approval_id: string | null; authorization_id: string | null; authorization_hash: string | null; content_hash: string; state_reason: string | null }>(ctx.workspaceId);
+  return rows.map((r) => { const payload = JSON.parse(r.payload) as { channel: string; text: string; mediaIds?: string[]; publishingDraftId?: string; tags?: string[] }; return { id: r.id, kind: r.kind, state: r.state, channel: payload.channel, text: payload.text, dueAt: r.due_at, providerAccountId: r.provider_account_id, approvalId: r.approval_id, authorizationId: r.authorization_id, authorizationHash: r.authorization_hash, operationHash: r.content_hash, mediaIds: payload.mediaIds ?? [], draftId: payload.publishingDraftId ?? null, reason: r.state_reason, tags: payload.tags??[] }; });
 }

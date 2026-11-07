@@ -1,0 +1,15 @@
+import { afterEach,describe,expect,it } from 'vitest';
+import { makeDomainEnv,type DomainTestEnv } from './domain.test-util';
+import { enqueueAction } from '../execution/enqueue';
+import { forecastPlanCapacity } from './plan-capacity';
+import { createPlanAuthorization } from './cloud-plans';
+import type { ActionRow } from '../execution/types';
+const opened:DomainTestEnv[]=[];afterEach(()=>{for(const f of opened.splice(0))f.engine.db.close();});
+async function fixture(){const f=await makeDomainEnv();opened.push(f);let count=0;const add=(input:{kind?:'social.publish'|'social.comment';cap?:number;zone?:string;at?:number;account?:string}={}):ActionRow=>enqueueAction(f.engine.db,{workspaceId:'ws',kind:input.kind??'social.publish',providerAccountId:input.account??f.accountId,payload:{text:'Approved',_policy:{window:{timezone:input.zone??'UTC'},limits:{accountPerDay:input.cap??10}}},idempotencyKey:'capacity'+(++count),dueAt:input.at??f.now()+3600000,awaitingApproval:true},{kind:'principal',id:'operator',source:'test',traceId:'fixture'},f.now()).action;return{f,add};}
+describe('shared monthly plan account cap forecasts',()=>{
+ it('counts dependent comments in the same account budget before creating an approval',async()=>{const{f,add}=await fixture();const actions=[add({cap:3}),add({kind:'social.comment',cap:3}),add({cap:3}),add({kind:'social.comment',cap:3})];expect(()=>createPlanAuthorization(f.engine,f.operator,'plan',actions,{})).toThrow(/4 actions, cap 3/);expect(f.engine.db.prepare('SELECT COUNT(*) n FROM plan_authorizations').get()).toEqual({n:0});});
+ it('does not double-count requested rows already inserted in the database',async()=>{const{f,add}=await fixture();const actions=Array.from({length:10},()=>add());expect(forecastPlanCapacity(f.engine.db,'ws',actions)).toEqual([]);expect(createPlanAuthorization(f.engine,f.operator,'plan',actions,{}).authorizationId).toBeTruthy();});
+ it('includes existing pending work and respects its stricter policy cap',async()=>{const{f,add}=await fixture();add({cap:3});add({cap:3});const actions=[add({cap:10}),add({cap:10})];expect(forecastPlanCapacity(f.engine.db,'ws',actions)).toMatchObject([{count:4,limit:3}]);});
+ it('uses the approved policy timezone at midnight instead of UTC date splitting',async()=>{const{f,add}=await fixture();const a=add({cap:1,zone:'America/New_York',at:Date.parse('2025-03-04T23:30:00Z')});const b=add({cap:1,zone:'America/New_York',at:Date.parse('2025-03-05T04:30:00Z')});expect(forecastPlanCapacity(f.engine.db,'ws',[a,b])).toMatchObject([{date:'2025-03-04',timezone:'America/New_York',count:2,limit:1}]);});
+ it('does not include cancelled work or another workspace in the forecast',async()=>{const{f,add}=await fixture();const cancelled=add({cap:1});f.engine.db.prepare("UPDATE scheduled_actions SET state='cancelled' WHERE id=?").run(cancelled.id);const a=add({cap:1});expect(forecastPlanCapacity(f.engine.db,'ws',[a])).toEqual([]);expect(forecastPlanCapacity(f.engine.db,'other',[])).toEqual([]);});
+});

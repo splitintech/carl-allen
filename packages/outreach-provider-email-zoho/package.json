@@ -1,0 +1,48 @@
+{
+  "name": "@splitin/outreach-provider-email-zoho",
+  "version": "0.0.0",
+  "description": "Zoho Mail inbox and human-reviewed drafts; no automated sender.",
+  "license": "MIT",
+  "author": "SplitInTech",
+  "homepage": "https://github.com/splitintech/carl-allen/tree/main/packages/outreach-provider-email-zoho#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/splitintech/carl-allen.git",
+    "directory": "packages/outreach-provider-email-zoho"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@splitin/outreach-contracts": "0.0.0",
+    "@splitin/outreach-provider-kit": "0.0.0"
+  },
+  "devDependencies": {},
+  "bugs": {
+    "url": "https://github.com/splitintech/carl-allen/issues"
+  }
+}

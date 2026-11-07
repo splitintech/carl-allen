@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, lstat } from 'node:fs/promises';
+import { open, lstat, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
 import type { ProviderContext } from '@splitin/outreach-contracts';
@@ -14,18 +14,27 @@ export function sniffMedia(data: Buffer): string | null {
   return null;
 }
 /** Workspace-scoped immutable asset; no user path, symlink, or unbounded file read. */
-export async function loadStoredMedia(ctx: ProviderContext, ref: string, root?: string): Promise<MediaAttachment> {
+export async function loadStoredMedia(ctx: ProviderContext, ref: string, root?: string, stage?: (ctx: ProviderContext, hash: string, filePath: string) => Promise<void>): Promise<MediaAttachment> {
   const match = /^outreach-media:\/\/([a-f0-9]{64})$/.exec(ref);
   if (!match) throw new Error('Invalid immutable media reference');
   ctx.signal.throwIfAborted();
   const hash = match[1]!;
-  const directory = resolve(root ?? process.env.OUTREACH_MEDIA_DIR ?? resolve(process.env.OUTREACH_HOME ?? '.outreach', 'media'));
+  const storageRoot = resolve(root ?? process.env.OUTREACH_MEDIA_DIR ?? resolve(process.env.OUTREACH_HOME ?? '.outreach', 'media'));
+  if(stage) await mkdir(storageRoot, {recursive:true,mode:0o700});
+  const rootInfo=await lstat(storageRoot);
+  if(!rootInfo.isDirectory()||rootInfo.isSymbolicLink()||rootInfo.mode&0o077)throw new Error('Media storage must be private directories');
+  const temporary=stage?await mkdtemp(join(storageRoot,'.execution-')):null;
+  const directory=temporary??storageRoot;
+  try {
   const workspace = createHash('sha256').update(ctx.workspaceId).digest('hex').slice(0, 24);
+  if (stage) { await mkdir(directory, { recursive: true, mode: 0o700 }); await mkdir(join(directory, workspace), { recursive: true, mode: 0o700 }); }
   for (const path of [directory, join(directory, workspace)]) {
     const info = await lstat(path);
     if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 0o077 || (process.getuid && info.uid !== process.getuid())) throw new Error('Media storage must be private directories');
   }
-  const file = await open(join(directory, workspace, hash), constants.O_RDONLY | constants.O_NOFOLLOW);
+  const path=join(directory,workspace,hash);
+  try { await lstat(path); } catch(error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || !stage) throw error; await stage(ctx,hash,path); }
+  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const info = await file.stat();
     if (!info.isFile() || info.mode & 0o077 || (process.getuid && info.uid !== process.getuid()) || info.size < 1 || info.size > 100 * 1024 * 1024) throw new Error('Media asset has invalid permissions or size');
@@ -43,4 +52,5 @@ export async function loadStoredMedia(ctx: ProviderContext, ref: string, root?: 
     if (!mimeType || (mimeType.startsWith('image/') && buffer.length > 5 * 1024 * 1024)) throw new Error('Unsupported media bytes or image size');
     return { name: `${hash}.${mimeType.split('/')[1]}`, mimeType, buffer };
   } finally { await file.close(); }
+  } finally { if(temporary)await rm(temporary,{recursive:true,force:true}); }
 }
