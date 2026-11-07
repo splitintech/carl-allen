@@ -1,0 +1,25 @@
+import { describe,it,expect } from 'vitest';
+import type { ProviderContext } from '@splitin/outreach-contracts';
+import { zohoAdapter,zohoRefreshTokenSource } from './index';
+import { zohoRequest } from './http';
+const grant={clientId:'fixture-client',clientSecret:'fixture-secret',refreshToken:'fixture-refresh',accountId:'123',region:'us'};
+const ctx:ProviderContext={workspaceId:'ws',account:{id:'zoho-account',provider:'zoho',externalAccountId:'owner@example.invalid',sender:{address:'owner@example.invalid',name:'Owner'}},secretRef:'env:FIXTURE',secrets:{get:async()=>JSON.stringify(grant)},traceId:'fixture',signal:new AbortController().signal,now:()=>1000000};
+function fixture(){const calls:{method:string;path:string;body?:Record<string,unknown>}[]=[];let deleted=false;const request:typeof fetch=async(input,init)=>{const url=new URL(String(input));const method=init?.method??'GET';const body=init?.body?JSON.parse(String(init.body)) as Record<string,unknown>:undefined;calls.push({method,path:url.pathname,body});let data:unknown={};
+ if(url.pathname==='/api/accounts/123')data={primaryEmailAddress:'owner@example.invalid'};
+ else if(url.pathname.endsWith('/folders'))data=[{folderType:'Drafts',folderId:'88'}];
+ else if(url.pathname.endsWith('/messages/view'))data=deleted?[]:[{messageId:'111',folderId:'88',toAddress:'person@example.invalid',subject:'Draft',summary:'Hello'}];
+ else if(url.pathname.endsWith('/content'))data={content:url.pathname.includes('/99/')?'<p>Please send details</p><p>Full conversation body</p>':'Original draft'};
+ else if(url.pathname.endsWith('/messages/search'))data=[{messageId:'321',folderId:'99',threadId:'999',fromAddress:'person@example.invalid',subject:'Reply',summary:'Please send details',receivedtime:900000}];
+ else if(method==='POST')data={messageId:'222'};
+ else if(method==='DELETE'){deleted=true;data={};}
+ return new Response(JSON.stringify({status:{code:200},data}),{status:200,headers:{'content-type':'application/json'}});};
+ return{adapter:zohoAdapter({fetch:request,tokens:{get:async()=> 'fixture-token',invalidate:()=>undefined},accountId:'123'}),calls,request};}
+describe('Zoho read/draft boundary',()=>{
+ it('never exposes a send capability or email sender',async()=>{const f=fixture();expect(f.adapter.email).toBeUndefined();expect(await f.adapter.account.discover(ctx)).toMatchObject({send:false});expect(await f.adapter.account.health(ctx)).toEqual({status:'ok'});});
+ it('saves only mode=draft with actual mailbox sender',async()=>{const f=fixture();const draft=await f.adapter.drafts!.save(ctx,{from:{address:ctx.account.sender.address},to:[{address:'person@example.invalid'}],subject:'Review',text:'Prepared text',headers:{}});expect(draft.id).toBe('222');expect(f.calls.find(c=>c.method==='POST')?.body).toMatchObject({mode:'draft',content:'Prepared text',mailFormat:'plaintext'});});
+ it('checks a draft belongs to the actual Drafts folder before editing or deletion',async()=>{const f=fixture();await expect(f.adapter.drafts!.delete(ctx,'987')).rejects.toThrow('Drafts folder');expect(f.calls.some(c=>c.method==='DELETE')).toBe(false);await f.adapter.drafts!.delete(ctx,'111');expect(f.calls.at(-1)?.path).toBe('/api/accounts/123/folders/88/messages/111');});
+ it('creates an acknowledged replacement before removing the old draft',async()=>{const f=fixture();await f.adapter.drafts!.save(ctx,{id:'111',from:{address:ctx.account.sender.address},to:[{address:'person@example.invalid'}],subject:'Edited',text:'Revised',headers:{}});const post=f.calls.findIndex(c=>c.method==='POST');const deletion=f.calls.findIndex(c=>c.method==='DELETE');expect(post).toBeGreaterThan(-1);expect(deletion).toBeGreaterThan(post);});
+ it('returns native inbox identifiers and a bounded resumable cursor',async()=>{const f=fixture();const page=await f.adapter.inbox!.listThreads(ctx);expect(page.threads[0]).toMatchObject({threadId:'999',peerUrl:'mailto:person@example.invalid',messages:[{id:'321',inbound:true,text:'Please send details\nFull conversation body'}]});expect(page.nextCursor).toBeTruthy();await expect(f.adapter.inbox!.listThreads(ctx,'not-a-cursor')).rejects.toThrow('cursor');});
+ it('blocks sender substitution and every non-draft POST before HTTP',async()=>{const f=fixture();await expect(f.adapter.drafts!.save(ctx,{from:{address:'other@example.invalid'},to:[],subject:'No',text:'No',headers:{}})).rejects.toThrow('sender');await expect(zohoRequest({api:'https://mail.zoho.com',fetch:f.request,tokens:{get:async()=>'',invalidate:()=>undefined},accountId:async()=> '123'},ctx,'POST','/api/accounts/123/messages',{mode:'send'})).rejects.toThrow('unsent draft');expect(f.calls).toHaveLength(0);});
+ it('caches account-specific refresh grants and never reports raw tokens in errors',async()=>{let count=0;const tokens=zohoRefreshTokenSource({fetch:async()=>{count++;return new Response(JSON.stringify({access_token:'fixture-access',expires_in:3600}),{status:200});}});expect(await tokens.get(ctx)).toBe('fixture-access');await tokens.get(ctx);expect(count).toBe(1);tokens.invalidate(ctx);await tokens.get(ctx);expect(count).toBe(2);});
+});

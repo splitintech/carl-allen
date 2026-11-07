@@ -1,3 +1,8 @@
+import { SCHEMA_0012 } from './schema-0012';
+import { SCHEMA_0011 } from './schema-0011';
+import { SCHEMA_0010 } from './schema-0010';
+import { SCHEMA_0009 } from './schema-0009';
+import { SCHEMA_0008 } from './schema-0008';
 import { SCHEMA_0007 } from './schema-0007';
 import { SCHEMA_0004 } from './schema-0004';
 import { SCHEMA_0006 } from './schema-0006';
@@ -20,6 +25,11 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: '0005_social_actions', sql: SCHEMA_0005 },
   { id: '0006_browser_actions', sql: SCHEMA_0006 },
   { id: '0007_publishing_workspace', sql: SCHEMA_0007 },
+  { id: '0008_cloud_workspace', sql: SCHEMA_0008 },
+  { id: '0009_package_extraction', sql: SCHEMA_0009 },
+  { id: '0010_remote_media_cleanup', sql: SCHEMA_0010 },
+  { id: '0011_plan_execution_scope', sql: SCHEMA_0011 },
+  { id: '0012_upload_integrity', sql: SCHEMA_0012 },
 ];
 
 export class MigrationDriftError extends Error {
@@ -49,7 +59,7 @@ export function migrate(db: SqlDatabase, migrations: readonly Migration[] = MIGR
     }
     // SQLite table rebuilds must disable FK enforcement outside the transaction;
     // validate every reference before commit and restore enforcement on every exit.
-    const rebuild = migration.id === '0005_social_actions' || migration.id === '0006_browser_actions';
+    const rebuild = migration.id === '0005_social_actions' || migration.id === '0006_browser_actions' || migration.id === '0008_cloud_workspace';
     const foreignKeys = db.prepare('PRAGMA foreign_keys').get<{ foreign_keys: number }>()?.foreign_keys === 1;
     if (rebuild && foreignKeys) db.exec('PRAGMA foreign_keys = OFF');
     try { db.transaction(() => {

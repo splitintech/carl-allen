@@ -1,3 +1,4 @@
+import { PUBLISHING_LIMITS } from './publishing-types';
 import { digestCanonical, ulid, type ActionKind, type ProviderPurpose } from '@splitin/outreach-contracts';
 import { enqueueAction } from '../execution/enqueue';
 import { transitionAction } from '../execution/actions-repo';
@@ -49,7 +50,7 @@ function validatePayload(kind: string, payload: Record<string, unknown>): void {
         }
     }
     if (payload.mediaUrls !== undefined) {
-        if (kind !== 'social.publish' || !Array.isArray(payload.mediaUrls) || payload.mediaUrls.length > 10) throw new PlaybookError(['up to ten post media URLs are supported']);
+        if (kind !== 'social.publish' || !Array.isArray(payload.mediaUrls) || payload.mediaUrls.length > Math.max(PUBLISHING_LIMITS.platforms[payload.channel as keyof typeof PUBLISHING_LIMITS.platforms]?.images ?? 0, PUBLISHING_LIMITS.platforms[payload.channel as keyof typeof PUBLISHING_LIMITS.platforms]?.videos ?? 0)) throw new PlaybookError(['Post media exceed this platform capability']);
         for (const value of payload.mediaUrls) {
             if (typeof value !== 'string') throw new PlaybookError(['invalid media URL']);
             if (/^outreach-media:\/\/[0-9a-f]{64}$/.test(value)) continue;
@@ -95,7 +96,7 @@ export function scheduleAction(env: DomainEnv, ctx: AuthContext, input: Schedule
 }
 function revokeActionApproval(env: DomainEnv, action: ActionRow): void {
     if (action.approval_id)
-        env.db.prepare("UPDATE approvals SET decision='revoked',decided_at=?,reason='scheduled action changed' WHERE id=? AND scope='action' AND decision IN ('pending','approved')").run(env.now(), action.approval_id);
+        env.db.prepare("UPDATE approvals SET decision='revoked',decided_at=?,reason='scheduled action changed' WHERE id=? AND (scope='action' OR id IN (SELECT id FROM plan_authorizations)) AND decision IN ('pending','approved')").run(env.now(), action.approval_id);
 }
 export function updateScheduledAction(env: DomainEnv, ctx: AuthContext, id: string, input: {
     text?: string;

@@ -10,8 +10,7 @@ Provider-neutral outreach orchestration with durable scheduling, human approvals
 suppression, reply/bounce/opt-out stops, at-most-once-without-confirmation recovery
 and append-only audit. TypeScript/Node, SQLite, CLI, loopback HTTP, Papr Work console
 and local stdio MCP. Gmail and Microsoft Graph reference adapters are exercised
-against local API fakes. LinkedIn tasks are manual; Zoho automated sending is not
-supported. Remote MCP and the separate Slack control app are not release-ready.
+against local API fakes. Carl-Allen adds approved Daytona browser execution, HTML work packages and an authenticated remote MCP gateway. Zoho supports reading and drafts only. Live host/provider acceptance and user-managed Cloudflare deployment remain separate gates.
 
 Publish this entry in the website's own repository only after the corresponding
 engine release is authorized and verified. Do not advertise live production

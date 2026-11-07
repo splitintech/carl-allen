@@ -24,3 +24,14 @@ export * from './content-management';
 export * from './publishing-types';
 export * from './publishing-media';
 export * from './publishing-drafts';
+
+export * from './cloud-plans';
+export * from './work-packages';
+export * from './work-package-prepare';
+export * from './outreach-workspace';
+export * from './r2-storage';
+export * from './inbox-sync';
+export * from './sequence-checks';
+export * from './publishing-durable';
+
+export * from './workspace-policy';

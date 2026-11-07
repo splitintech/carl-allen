@@ -154,6 +154,10 @@ describe('social browser with real Chromium against a local fixture', () => {
       expect(effects).toEqual(['/effect/post?media=1']);
     } finally { await images.close(); }
   });
+  it('uploads all twenty approved LinkedIn images without truncating the native selection', async () => {
+    const images = socialBrowserAdapter({ runtime:{kind:'fixture',sandboxId:'fixture'},origin,confirmationTimeoutMs:10000,accountBindings:{'li-1':{expectedProfileUrl:sender,pageFactory:()=>context.newPage()}},media:{allowedOrigins:[origin]} });
+    try { expect(await images.social!.publish(ctx(),{actionId:'twenty',idempotencyKey:'twenty',channel:'linkedin',text:'Twenty approved images',mediaUrls:Array.from({length:20},()=>`${origin}/image.png`)})).toMatchObject({kind:'accepted'});expect(effects).toEqual(['/effect/post?media=20']); } finally {await images.close();}
+  });
   it('uploads immutable video bytes and confirms LinkedIn media before posting', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'outreach-linkedin-video-'));
     const workspace = createHash('sha256').update('ws').digest('hex').slice(0, 24);

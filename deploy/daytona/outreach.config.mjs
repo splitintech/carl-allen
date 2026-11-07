@@ -1,6 +1,8 @@
 import { readFileSync, lstatSync } from 'node:fs';
+import { stageMediaByHash } from '@splitin/outreach-core';
 import { socialBrowserAdapter } from '@splitin/outreach-provider-social-browser';
 import { gmailAdapter } from '@splitin/outreach-provider-email-gmail';
+import { zohoAdapter } from '@splitin/outreach-provider-email-zoho';
 import { outlookAdapter } from '@splitin/outreach-provider-email-outlook';
 
 const bindingsPath = process.env.OUTREACH_SOCIAL_ACCOUNT_BINDINGS_FILE ?? process.env.OUTREACH_SOCIAL_BINDINGS_FILE ?? '/data/outreach/social-bindings.json';
@@ -19,9 +21,10 @@ export default {
       runtime: { kind: 'daytona', sandboxId: process.env.DAYTONA_SANDBOX_ID },
       accountBindings: () => optionalJson(bindingsPath, {}),
       recipes: optionalJson(recipesPath, []),
-      media: { allowedOrigins: JSON.parse(process.env.OUTREACH_MEDIA_ALLOWED_ORIGINS ?? '[]') },
+      media: { allowedOrigins: JSON.parse(process.env.OUTREACH_MEDIA_ALLOWED_ORIGINS ?? '[]'), ...(process.env.OUTREACH_MEDIA_GATEWAY ? { stageStoredMedia: (ctx, hash, path) => stageMediaByHash(ctx.workspaceId, hash, path) } : {}) },
       purposes: ['social_publishing', 'social_messaging', 'manual_correspondence'],
     }),
+    zohoAdapter({ region: process.env.OUTREACH_ZOHO_REGION ?? 'us' }),
     gmailAdapter({ purposes: ['manual_correspondence', 'automated_outreach'] }),
     outlookAdapter({ purposes: ['manual_correspondence'] }),
   ],

@@ -1,3 +1,4 @@
+/* global URLSearchParams */
 // Papr backend handler for the Outreach Console (ADR 0004). Node 18+, no dependencies.
 // Maps a FIXED set of action names to FIXED engine API routes. It never forwards arbitrary paths or
 // methods, and the API token stays server-side (declared as a manifest key, never sent to the browser).
@@ -68,10 +69,36 @@ function object(params, key) {
 }
 
 const ACTIONS = {
-  'publishing-overview': async () => ({ ...await api('GET', 'v1/publishing'), liveViewUrl: connection().liveViewUrl || null }),
+  'storage-cleanup': () => api('POST','v1/publishing/media-cleanup',{}),
+  'publishing-plan-prepare': (p) => api('POST','v1/publishing/plans/'+need(p,'draftId',ID)+'/prepare',{}),
+  'policy-settings':()=>api('GET','v1/settings/policy'),
+  'policy-settings-save':(p)=>api('PATCH','v1/settings/policy',object(p,'input')),
+  'storage-settings': () => api('GET','v1/settings/media'),
+  'storage-settings-save': (p) => api('PATCH','v1/settings/media',{quotaBytes:p.quotaBytes}),
+  'publishing-actions-page': (p) => api('GET','v1/publishing/actions?'+new URLSearchParams(Object.entries(p).filter(([,v])=>v!==undefined).map(([k,v])=>[k,String(v)]))),
+  'publishing-drafts-page': (p) => api('GET','v1/publishing/drafts?'+new URLSearchParams(Object.entries(p).filter(([,v])=>v!==undefined).map(([k,v])=>[k,String(v)]))),
+
+  'work-package-import': (p) => api('POST','v1/work-packages',{name:need(p,'name'),html:need(p,'html')}),
+  'work-packages-list': (p) => api('GET','v1/work-packages?cursor='+encodeURIComponent(p.cursor??'')),
+  'work-package-get': (p) => api('GET','v1/work-packages/'+need(p,'packageId',ID)),
+  'work-package-repair': (p) => api('PATCH','v1/work-packages/'+need(p,'packageId',ID),object(p,'input')),
+  'work-package-prepare': (p) => api('POST','v1/work-packages/'+need(p,'packageId',ID)+'/prepare',{}),
+  'work-package-template': () => api('GET','v1/work-packages/template'),
+  'plan-approve': (p) => api('POST','v1/plan-authorizations/'+need(p,'authorizationId',ID)+'/approve',{operationHash:need(p,'operationHash',HASH)}),
+  'people-list': (p) => api('GET','v1/people?cursor='+encodeURIComponent(p.cursor??'')+'&limit='+String(Math.min(200,p.limit??100))),
+  'outreach-list': (p) => api('GET','v1/outreach/sequences?cursor='+encodeURIComponent(p.cursor??'')+'&limit='+String(Math.min(200,p.limit??100))),
+  'outreach-pause': (p) => api('POST','v1/outreach/sequences/'+need(p,'sequenceId',ID)+'/pause',{}),
+  'inbox-list': (p) => api('GET','v1/inbox/threads?cursor='+encodeURIComponent(p.cursor??'')+'&limit='+String(Math.min(200,p.limit??100))),
+  'inbox-assign': (p) => api('PATCH','v1/inbox/threads/'+need(p,'threadId',ID),{...(p.principalId!==undefined?{assignedTo:p.principalId===null?null:need(p,'principalId',ID)}:{}),...(p.notes!==undefined?{notes:p.notes}:{})}),
+  'insights': () => api('GET','v1/insights'),
+  'team-list': () => api('GET','v1/team'),
+  'team-invite': (p) => api('POST','v1/team/invitations',{email:need(p,'email'),roles:p.roles}),
+
+  'publishing-overview': async () => { const data=await api('GET','v1/publishing'); return {...data,liveViewUrl:data.roles?.includes('admin')?(connection().liveViewUrl||null):null}; },
   'publishing-draft-save': (p) => api('POST', 'v1/publishing/drafts', object(p, 'input')),
   'publishing-draft-delete': (p) => api('DELETE', `v1/publishing/drafts/${need(p, 'draftId', ID)}`),
   'publishing-submit': (p) => api('POST', `v1/publishing/drafts/${need(p, 'draftId', ID)}/submit`),
+  'publishing-upload-status': (p) => api('GET', `v1/publishing/uploads/${need(p,'uploadId',ID)}`),
   'publishing-upload-start': (p) => api('POST', 'v1/publishing/uploads', object(p, 'input')),
   'publishing-upload-chunk': (p) => api('POST', `v1/publishing/uploads/${need(p, 'uploadId', ID)}/chunks`, { index: p.index, data: p.data }),
   'publishing-upload-complete': (p) => api('POST', `v1/publishing/uploads/${need(p, 'uploadId', ID)}/complete`),

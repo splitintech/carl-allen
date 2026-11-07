@@ -32,7 +32,7 @@ export function createPublishingPreview({ handler = handle, standalone = false }
         let bytes = 0; const chunks = [];
         for await (const chunk of request) {
           bytes += chunk.length;
-          if (bytes > bodyLimit) return send(response, 413, { error: 'Request too large' });
+          if (bytes > (/work-package-(?:import|repair)$/.test(url.pathname) ? 25 * 1024 * 1024 : bodyLimit)) return send(response, 413, { error: 'Request too large' });
           chunks.push(chunk);
         }
         let body;

@@ -1,3 +1,4 @@
+import { gmailInbox } from './inbox';
 import { gmailDrafts } from './drafts';
 import { TokenError, type AccessTokenSource, type AccountPort, type ProviderAdapter, type ProviderPurpose } from '@splitin/outreach-contracts';
 import { ProviderNetworkError } from '@splitin/outreach-provider-kit';
@@ -88,6 +89,7 @@ export function gmailAdapter(options: GmailAdapterOptions = {}): ProviderAdapter
     purposes: options.purposes ?? ['manual_correspondence'],
     account,
     drafts: gmailDrafts(http, tokens),
+    inbox: gmailInbox(http, tokens),
     email: gmailSender({ http, tokens, settleMs: options.settleMs ?? 180_000 }),
     mailbox: gmailMailbox({ http, tokens, ...(options.pollBudget ? { budget: options.pollBudget } : {}) }),
   };

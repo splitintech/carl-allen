@@ -1,0 +1,20 @@
+import { plainMailText } from '@splitin/outreach-provider-kit';
+import { DraftMutationRefusedError, type EmailContent, type EmailDraftPort, type MailDraft, type ProviderContext } from '@splitin/outreach-contracts';
+import { numeric,zohoRequest,type ZohoHttp } from './http';
+import { messageContent,type ZohoMessage } from './mailbox';
+const addresses=(value='')=>value.split(',').map(address=>({address:address.trim()})).filter(v=>v.address);
+export function zohoDrafts(http:ZohoHttp):EmailDraftPort{
+  const folder=async(ctx:ProviderContext)=>{const account=numeric(await http.accountId(ctx));const value=await zohoRequest(http,ctx,'GET',`/api/accounts/${account}/folders`);if(!Array.isArray(value))throw new Error('Zoho folders response malformed');const found=value.find((f:{folderType?:string;folderName?:string})=>/^drafts?$/i.test(f.folderType??'')||/^drafts$/i.test(f.folderName??'')) as {folderId?:string}|undefined;if(!found?.folderId)throw new Error('Zoho Drafts folder is unavailable');return numeric(String(found.folderId));};
+  const rows=async(ctx:ProviderContext)=>{const account=numeric(await http.accountId(ctx));const folderId=await folder(ctx);const result:ZohoMessage[]=[];for(let start=1;start<=10000;start+=200){const data=await zohoRequest(http,ctx,'GET',`/api/accounts/${account}/messages/view?folderId=${folderId}&start=${start}&limit=200`);if(!Array.isArray(data))throw new Error('Zoho draft listing malformed');result.push(...data as ZohoMessage[]);if(data.length<200)return result;}throw new Error('Zoho draft listing exceeded its bound');};
+  const locate=async(ctx:ProviderContext,id:string)=>{numeric(id);const found=(await rows(ctx)).find(m=>String(m.messageId)===id);if(!found)throw new Error('Draft is not in this account Drafts folder');return found;};
+  const get=async(ctx:ProviderContext,id:string):Promise<MailDraft>=>{const m=await locate(ctx,id);const html=await messageContent(http,ctx,String(m.folderId),id);return{id,content:{from:{address:ctx.account.sender.address},to:addresses(m.toAddress),subject:m.subject??'',text:plainMailText(html),html,headers:{},...(m.inReplyTo?{inReplyTo:m.inReplyTo}:{}),...(m.refHeader?{references:m.refHeader.split(/\s+/)}:{})}};};
+  const remove=async(ctx:ProviderContext,id:string)=>{const m=await locate(ctx,id);await zohoRequest(http,ctx,'DELETE',`/api/accounts/${numeric(await http.accountId(ctx))}/folders/${numeric(String(m.folderId))}/messages/${numeric(id)}?expunge=false`);};
+  return{get,async list(ctx){const result:MailDraft[]=[];for(const m of await rows(ctx))result.push(await get(ctx,String(m.messageId)));return result;},async save(ctx,input:EmailContent&{id?:string}){
+    if(input.from.address.toLowerCase()!==ctx.account.sender.address.toLowerCase())throw new DraftMutationRefusedError('Draft sender must match connected Zoho mailbox');
+    if(input.id){const old=await locate(ctx,input.id);if(old.hasAttachment||old.ccAddress||old.bccAddress)throw new DraftMutationRefusedError('Edit this draft in Zoho to preserve attachments and CC/BCC');const prior=await get(ctx,input.id);input={...prior.content,...input};}
+    const body={mode:'draft',fromAddress:ctx.account.sender.address,toAddress:input.to.map(v=>v.address).join(','),subject:input.subject,content:input.html??input.text,mailFormat:input.html?'html':'plaintext',encoding:'UTF-8',...(input.inReplyTo?{inReplyTo:input.inReplyTo}:{}),...(input.references?.length?{refHeader:input.references.join(' ')}:{})};
+    const data=await zohoRequest(http,ctx,'POST',`/api/accounts/${numeric(await http.accountId(ctx))}/messages`,body) as {messageId?:string;draftId?:string};const id=String(data.messageId??data.draftId??'');numeric(id);
+    // Zoho documents create-draft, not atomic update. Preserve original until replacement is acknowledged.
+    if(input.id&&input.id!==id){try{await remove(ctx,input.id);}catch{throw new DraftMutationRefusedError(`Replacement draft ${id} saved; original retained because deletion failed. Review both drafts in Zoho.`);}}
+    return{id,content:input};},delete:remove};
+}

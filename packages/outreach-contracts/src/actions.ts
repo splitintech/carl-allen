@@ -30,6 +30,7 @@ export const ACTION_KINDS = [
   'social.publish',
   'social.message',
   'social.connect',
+  'social.comment',
   'browser.task',
 ] as const;
 

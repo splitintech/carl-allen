@@ -1,3 +1,4 @@
+import { publishingFormatIssues } from '@splitin/outreach-contracts';
 import type { ProviderContext, SendResult, SocialHealth, SocialPublishInput } from '@splitin/outreach-contracts';
 import type { Page, Response } from 'playwright';
 import type { SocialSession } from './session';
@@ -29,15 +30,16 @@ async function identity(page: Page, binding: AccountBinding, channel: Network, o
   const actual = href && canonicalSocialProfile(new URL(href, PLATFORM_ORIGINS[channel]).href);
   if (!actual || actual.channel !== channel || actual.url.toLowerCase() !== expected.url.toLowerCase()) throw new Error('needs_reauth: signed-in profile does not match the bound account');
 }
-async function ready(page: Page, binding: AccountBinding, channel: Network, options: NetworkOptions): Promise<void> {
+export async function networkReady(page: Page, binding: AccountBinding, channel: Network, options: NetworkOptions): Promise<void> {
   await page.goto(`${options.origin}${START[channel]}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   await identity(page, binding, channel, options);
 }
 export async function networkHealth(session: SocialSession, ctx: ProviderContext, binding: AccountBinding, channel: Network, options: NetworkOptions): Promise<SocialHealth> {
-  try { await session.withPage(ctx.signal, (page) => ready(page, binding, channel, options)); return { status: 'ok', reconnectNeeded: false }; }
+  try { await session.withPage(ctx.signal, (page) => networkReady(page, binding, channel, options)); return { status: 'ok', reconnectNeeded: false }; }
   catch (error) { return { status: 'reauth_required', reconnectNeeded: true, detail: String((error as Error).message).slice(0, 300) }; }
 }
 function validate(channel: Network, input: SocialPublishInput, files: readonly MediaAttachment[]): void {
+  const formatIssues=publishingFormatIssues(channel,input.format,files.map(f=>f.mimeType));if(formatIssues.length)throw new Error(formatIssues.join('; '));
   if (!input.text.trim() && !files.length) throw new Error('A caption or uploaded media is required');
   if (input.channel !== channel) throw new Error('The requested channel does not match the browser account');
   if (Array.from(input.text).length > (channel === 'x' ? 280 : 2200)) throw new Error('Caption exceeds the conservative platform limit');
@@ -73,6 +75,7 @@ async function compose(page: Page, channel: Network, input: SocialPublishInput, 
   if (channel === 'instagram') {
     await page.getByRole('link', { name: /^New post$|^Create$/i }).or(page.getByRole('button', { name: /^Create$|^New post$/i })).first().click();
     await uploads(page, files, channel, options);
+    if(files.some(f=>f.mimeType.startsWith('video/'))){const reel=page.locator('[data-reel-preview], [data-testid="reel-preview"]').or(page.getByText(/^New reel$|videos? (?:will be |are )shared as reels|your video.*reel/i));if(!await reel.count())throw new Error('Instagram reel format is not confirmed by this account composer; publication held');}
     for (let i = 0; i < 3 && !await page.locator('textarea[aria-label*="caption" i], [contenteditable="true"][role="textbox"]').count(); i++) await page.getByRole('button', { name: /^Next$/ }).click();
     await page.locator('textarea[aria-label*="caption" i], [contenteditable="true"][role="textbox"]').first().fill(input.text);
     return '[role="dialog"] :is(button, [role="button"]):text-is("Share")';
@@ -168,15 +171,15 @@ export async function networkPublish(session: SocialSession, ctx: ProviderContex
   let crossed = false; let authenticated = false; let active: Page | undefined;
   try {
     return await session.withPage(ctx.signal, async (page) => {
-      active = page; await ready(page, binding, channel, options); authenticated = true;
+      active = page; await networkReady(page, binding, channel, options); authenticated = true;
       const before = await previous(page, channel, options); const submit = await compose(page, channel, input, files, options);
       await identity(page, binding, channel, options); ctx.signal.throwIfAborted(); checkOrigin(page, options);
-      let observed: string | undefined;
+      let observed: string | undefined; let observedUrl: string | undefined;
       const listener = (response: Response) => {
-        if (crossed && isCreateResponse(channel, response, options.origin) && approvedCreateRequest(channel, response.request().postData(), input.text)) void response.json().then((body) => {
+        if (crossed && isCreateResponse(channel, response, options.origin) && (channel!=='instagram'||files.length<2||/configure_to_sidecar\/?$/.test(new URL(response.url()).pathname)) && (channel!=='instagram'||!files.some(f=>f.mimeType.startsWith('video/'))||/configure_to_clips\/?$/.test(new URL(response.url()).pathname)) && approvedCreateRequest(channel, response.request().postData(), input.text)) void response.json().then((body) => {
           const author = responseAuthor(channel, body); const expected = new URL(binding.expectedProfileUrl!).pathname.replace(/\//g, '').replace(/^@/, '').toLowerCase();
           const id = responseId(channel, body);
-          if ((!author || author.toLowerCase() === expected) && id && !before.ids.has(id)) observed = id;
+          if ((!author || author.toLowerCase() === expected) && id && !before.ids.has(id)) { observed = id; if(channel==='instagram'){const media=(body as {media?:{code?:string};code?:string}).media??body as {code?:string};if(typeof media.code==='string'&&/^[A-Za-z0-9_-]+$/.test(media.code))observedUrl=`https://www.instagram.com/${/configure_to_clips\/?$/.test(new URL(response.url()).pathname)?'reel':'p'}/${media.code}/`;} }
         }).catch(() => undefined);
       };
       page.on('response', listener);
@@ -184,7 +187,10 @@ export async function networkPublish(session: SocialSession, ctx: ProviderContex
         crossed = true;
         await page.locator(submit).first().click();
         const id = await receipt(page, channel, binding, input, before, () => observed, options);
-        return { kind: 'accepted', receipt: { providerMessageId: id, acceptedAt: ctx.now() } };
+        let url=observedUrl;
+        if(/^https:\/\//.test(id))url=id;
+        if(!url&&channel==='instagram'){const nodes=page.locator(RECEIPTS.instagram);for(let i=0;i<await nodes.count();i++){const node=nodes.nth(i);const href=await node.getAttribute('href');if(href&&!before.urls.has(canonicalPublication(href,options.origin))&&await ownedPublication(node,binding,channel,input)){const candidate=new URL(href,options.origin);if(paths.instagram.test(candidate.pathname))url=PLATFORM_ORIGINS.instagram+candidate.pathname;}}}
+        return { kind: 'accepted', receipt: { providerMessageId: id, acceptedAt: ctx.now(), ...(url?{raw:{url}}:{}) } };
       } finally { page.off('response', listener); }
     });
   } catch (error) {

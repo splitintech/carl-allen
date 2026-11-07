@@ -5,6 +5,10 @@ import { accountChannel, PLATFORM_ORIGINS } from './platforms';
 export interface AccountBinding extends SessionOptions {
   readonly kind?: 'linkedin' | 'x' | 'instagram' | 'tiktok' | 'browser';
   readonly expectedProfileUrl?: string;
+  readonly connectionId?: string;
+  readonly loginProfileUrl?: string;
+  readonly publishingProfileUrl?: string;
+  readonly publishingIdentitySelector?: string;
   /** Trusted selector identifying the signed-in profile, never a task-supplied selector. */
   readonly identitySelector?: string;
   /** Trusted conversation-header profile link used to verify the approved DM recipient. */

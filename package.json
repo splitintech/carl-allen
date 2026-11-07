@@ -28,10 +28,11 @@
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "check:packed": "node scripts/check-packed.mjs",
     "check:migration": "python3 scripts/check-migration.py",
-    "test:runtime": "node --test deploy/daytona/runtime-files.test.mjs && python3 -m unittest discover -s deploy/daytona/tests -v",
+    "test:runtime": "node --test deploy/daytona/runtime-files.test.mjs deploy/daytona/browser-pool.test.mjs scripts/cloud-recovery.test.mjs && python3 -m unittest discover -s deploy/daytona/tests -v",
     "test:browser": "node scripts/browser-fixtures.mjs",
     "studio:build": "node scripts/build-publishing.mjs",
-    "studio": "node scripts/publishing-preview.mjs"
+    "studio": "node scripts/publishing-preview.mjs",
+    "test:cloud": "npm --prefix deploy/cloudflare test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -51,10 +52,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/splitintech/outreach-engine.git"
+    "url": "git+https://github.com/splitintech/carl-allen.git"
   },
-  "homepage": "https://github.com/splitintech/outreach-engine#readme",
+  "homepage": "https://github.com/splitintech/carl-allen#readme",
   "bugs": {
-    "url": "https://github.com/splitintech/outreach-engine/issues"
+    "url": "https://github.com/splitintech/carl-allen/issues"
   }
 }

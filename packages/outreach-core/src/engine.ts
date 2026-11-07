@@ -1,3 +1,4 @@
+import { pollSocialInboxes } from './domain/inbox-sync';
 import { ulid, type ManualTaskProvider, type ProviderAdapter, type SecretResolver, type SqlDatabase } from '@splitin/outreach-contracts';
 import { runExecutionPass, type ExecutionPassReport } from './execution/executor';
 import { setKillSwitch, type KillSwitchScope } from './execution/kill-switches';
@@ -84,6 +85,7 @@ export function createEngine(config: EngineConfig): Engine {
       // Health first: an account that recovered (or broke) since the last pass is treated accordingly now.
       const health = await checkDueAccountHealth(env, healthIntervalMs);
       const polled = await pollDueMailboxes(env, pollIntervalMs);
+      await pollSocialInboxes(env);
       const inbound = processInboundEvents(env);
       return { health, polled, inbound, ...(await runExecutionPass(exec)) };
     },

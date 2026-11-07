@@ -73,9 +73,11 @@ describe('bundle structure', () => {
   });
 
   it('ships JavaScript that parses', () => {
-    for (const file of [...browserSources().filter((f) => f.path.endsWith('.js')).map((f) => f.path), `${manifest.app.appPath}/backend/outreach.mjs`, 'jobs/outreach-worker/code/run.mjs']) {
-      expect(spawnSync(process.execPath, ['--check', join(bundle, file)]).status, file).toBe(0);
-    }
+    const files=[...browserSources().filter(f=>f.path.endsWith('.js')), ...[`${manifest.app.appPath}/backend/outreach.mjs`,'jobs/outreach-worker/code/run.mjs'].map(path=>({path,content:read(path)}))];
+    // Compile every module without linking or running it; one process avoids repeated Node startup.
+    const script='import {SourceTextModule} from "node:vm";import {readFileSync} from "node:fs";for(const file of JSON.parse(readFileSync(0,"utf8")))new SourceTextModule(file.content,{identifier:file.path});';
+    const checked=spawnSync(process.execPath,['--experimental-vm-modules','--input-type=module','-e',script],{input:JSON.stringify(files),encoding:'utf8'});
+    expect(checked.status,checked.stderr).toBe(0);
   });
 });
 

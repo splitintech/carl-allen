@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, appendFileSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -42,6 +42,15 @@ describe('publishing workspace and protected uploads', () => {
     expect((await f.request('/v1/publishing/uploads', 'POST', { name: 'photo.png', mime: 'image/png', size: png.length }, 'viewer')).status).toBe(403);
     expect((await f.request('/v1/publishing/drafts', 'POST', f.draft([{ channel: 'linkedin', text: 'Draft', mediaIds: [] }]), 'viewer')).status).toBe(403);
   });
+  it('resumes committed offsets after a lost response and reuses the hash-bound reservation safely',async()=>{
+    const bytes=Buffer.concat([png,Buffer.alloc(PUBLISHING_LIMITS.chunkBytes)]);const sha256=createHash('sha256').update(bytes).digest('hex');const input={name:'resume.png',mime:'image/png',size:bytes.length,sha256};const start=await(await f.request('/v1/publishing/uploads','POST',input)).json() as {uploadId:string;chunkBytes:number};const path='/v1/publishing/uploads/'+start.uploadId;
+    expect((await f.request(path,'GET',undefined,'viewer')).status).toBe(403);expect((await f.request(path,'GET',undefined,'other')).status).toBe(404);
+    await f.request(path+'/chunks','POST',{index:0,data:bytes.subarray(0,start.chunkBytes).toString('base64')});const status=await(await f.request(path)).json();expect(status).toMatchObject({receivedBytes:start.chunkBytes,nextIndex:1,expectedSha256:sha256,state:'uploading'});expect(await(await f.request('/v1/publishing/uploads','POST',input)).json()).toMatchObject({uploadId:start.uploadId,receivedBytes:start.chunkBytes,nextIndex:1});
+    const workspace=createHash('sha256').update('ws').digest('hex').slice(0,24);appendFileSync(join(f.mediaDir,workspace,'.uploads',start.uploadId),Buffer.from('uncommitted'));expect(await(await f.request(path)).json()).toMatchObject({receivedBytes:start.chunkBytes,nextIndex:1});
+    expect((await f.request(path+'/chunks','POST',{index:1,data:bytes.subarray(start.chunkBytes).toString('base64')})).status).toBe(200);const complete=await(await f.request(path+'/complete','POST')).json() as {asset:{id:string;sha256:string}};expect(complete.asset.sha256).toBe(sha256);expect(await(await f.request(path)).json()).toMatchObject({state:'complete',asset:{id:complete.asset.id,sha256}});
+  });
+  it('holds a truncated partial upload instead of reporting a falsely resumable offset',async()=>{const bytes=Buffer.concat([png,Buffer.alloc(PUBLISHING_LIMITS.chunkBytes)]);const start=await(await f.request('/v1/publishing/uploads','POST',{name:'truncated.png',mime:'image/png',size:bytes.length})).json() as {uploadId:string;chunkBytes:number};const route='/v1/publishing/uploads/'+start.uploadId;await f.request(route+'/chunks','POST',{index:0,data:bytes.subarray(0,start.chunkBytes).toString('base64')});const workspace=createHash('sha256').update('ws').digest('hex').slice(0,24);truncateSync(join(f.mediaDir,workspace,'.uploads',start.uploadId),10);expect((await f.request(route)).status).toBe(409);expect(f.db.prepare('SELECT COUNT(*) n FROM publishing_media').get()).toEqual({n:0});});
+  it('does not finalize valid media bytes that differ from the original file checksum commitment',async()=>{const sha256=createHash('sha256').update(Buffer.concat([png,Buffer.from('different')])).digest('hex');const start=await(await f.request('/v1/publishing/uploads','POST',{name:'mismatch.png',mime:'image/png',size:png.length,sha256})).json() as {uploadId:string};const route='/v1/publishing/uploads/'+start.uploadId;await f.request(route+'/chunks','POST',{index:0,data:png.toString('base64')});const result=await f.request(route+'/complete','POST');expect(result.status).toBe(409);expect(await result.json()).toMatchObject({message:expect.stringContaining('checksum')});expect(f.db.prepare('SELECT COUNT(*) n FROM publishing_media').get()).toEqual({n:0});expect(await(await f.request(route)).json()).toMatchObject({state:'uploading',receivedBytes:png.length});});
   it('uploads immutable bytes with ordered repeat-safe chunks and scoped preview reads', async () => {
     const bytes = Buffer.concat([png, Buffer.alloc(PUBLISHING_LIMITS.chunkBytes)]);
     const start = await (await f.request('/v1/publishing/uploads', 'POST', { name: 'photo.png', mime: 'image/png', size: bytes.length })).json() as { uploadId: string; chunkBytes: number };
