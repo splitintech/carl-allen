@@ -107,10 +107,12 @@
       "requirement": "Guided mapping, repair, source links and explicit account/media resolution",
       "implementation": "implemented",
       "source": [
-        "apps/papr/bundle/apps/outreach-console/publishing/work-packages.js"
+        "apps/papr/bundle/apps/outreach-console/publishing/work-packages.js",
+        "apps/papr/bundle/apps/outreach-console/publishing/import-mapping.js"
       ],
       "automatedEvidence": [
-        "apps/papr/src/cloud-workspace-ui.test.ts"
+        "apps/papr/src/cloud-workspace-ui.test.ts",
+        "apps/papr/src/import-mapping.test.ts"
       ],
       "liveAcceptance": "pending-when-applicable"
     },
@@ -501,13 +503,17 @@
     },
     {
       "id": "O05",
-      "requirement": "Deterministic approved reply rules, expiry, response bounds and loop prevention",
+      "requirement": "Separately approved frozen reply rules with expiry, response bounds and loop prevention",
       "implementation": "implemented",
       "source": [
-        "packages/outreach-core/src/domain/inbox-sync.ts"
+        "packages/outreach-core/src/domain/inbox-sync.ts",
+        "packages/outreach-core/src/domain/reply-playbooks.ts"
       ],
       "automatedEvidence": [
-        "packages/outreach-core/src/domain/inbox-sync.test.ts"
+        "packages/outreach-core/src/domain/inbox-sync.test.ts",
+        "packages/outreach-core/src/domain/reply-playbooks.test.ts",
+        "packages/outreach-server/src/reply-playbooks.test.ts",
+        "apps/papr/src/reply-playbooks-ui.test.ts"
       ],
       "liveAcceptance": "pending-when-applicable"
     },
@@ -669,6 +675,32 @@
         "scripts/mcp-smoke.mjs"
       ],
       "liveAcceptance": "synthetic-only"
+    },
+    {
+      "id": "U07",
+      "requirement": "Native parent/comment receipts, inbox monitoring freshness and exact-plan rejection in the single HTML UI",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/delivery.js"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/publishing-results-ui.test.ts",
+        "packages/outreach-server/src/publishing-results.test.ts"
+      ],
+      "liveAcceptance": "pending-real-native-receipts"
+    },
+    {
+      "id": "I05",
+      "requirement": "Patched bounded manifest validation and declared standalone schema dependency",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-contracts/package.json",
+        "package-lock.json"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-contracts/src/work-package-schema.test.ts"
+      ],
+      "liveAcceptance": "source-regression-tested"
     }
   ],
   "externalGates": [

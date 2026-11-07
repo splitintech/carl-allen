@@ -1,4 +1,4 @@
-import { CANCELLABLE_ACTION_STATES,digestCanonical,ulid,type SocialConversation,type WorkManifest } from '@splitin/outreach-contracts';
+import { CANCELLABLE_ACTION_STATES,digestCanonical,ulid,type SocialConversation } from '@splitin/outreach-contracts';
 import type { DomainEnv } from './env';
 import { providerContext } from '../execution/invoke';
 import { transitionAction,type Actor,loadAccount } from '../execution/actions-repo';
@@ -6,8 +6,8 @@ import { enqueueAction } from '../execution/enqueue';
 import type { ActionRow,AccountRow } from '../execution/types';
 import { attachPlanAction } from './cloud-plans';
 import { addSuppression,isSuppressed } from './suppressions';
+import { approvedReplyScope,type ReplyPlaybookRow } from './reply-playbook-scope';
 interface ThreadRow{id:string;contact_id:string|null;peer_url:string}
-interface Playbook{id:string;workspace_id:string;package_id:string;account_id:string;authorization_id:string;rules:string;valid_until:number;enabled:number}
 const normalized=(v:string)=>v.replace(/^mailto:/i,'').replace(/\/$/,'').toLowerCase();
 const actor=(now:number):Actor=>({kind:'system',id:'inbox-sync',source:'worker',traceId:ulid(now)});
 export function isInboxOptOut(text:string):boolean{return /\b(unsubscribe|remove me|do not contact|don['’]t contact|stop messaging|stop emailing)\b|^\s*stop[.!\s]*$/i.test(text);}
@@ -24,23 +24,17 @@ function stopContact(env:DomainEnv,workspace:string,contactId:string,at:number,o
   for(const action of env.db.prepare("SELECT * FROM scheduled_actions WHERE workspace_id=? AND json_extract(payload,'$._contactId')=?").all<ActionRow>(workspace,contactId))if(CANCELLABLE_ACTION_STATES.includes(action.state))transitionAction(env.db,action,'cancelled',env.now(),actor(env.now()),{state_reason:'contact_opt_out',lease_owner:null,lease_expires_at:null});
  }
 }
-function approvedRule(env:DomainEnv,book:Playbook):WorkManifest['replyPlaybooks'][number]|null{
- const row=env.db.prepare('SELECT a.decision,a.preview,a.operation_hash,p.manifest_hash FROM approvals a JOIN plan_authorizations p ON p.id=a.id WHERE a.id=? AND a.workspace_id=?').get<{decision:string;preview:string;operation_hash:string;manifest_hash:string}>(book.authorization_id,book.workspace_id);
- if(!row||row.decision!=='approved'||row.operation_hash!==row.manifest_hash||digestCanonical(JSON.parse(row.preview))!==row.manifest_hash)return null;
- const preview=JSON.parse(row.preview) as {summary?:{manifest?:WorkManifest;accountMap?:Record<string,string>}};const rule=JSON.parse(book.rules) as WorkManifest['replyPlaybooks'][number];
- const approved=preview.summary?.manifest?.replyPlaybooks.find(r=>r.id===rule.id);return approved&&preview.summary?.accountMap?.[rule.accountRef]===book.account_id&&digestCanonical(approved)===digestCanonical(rule)?rule:null;
-}
 function scheduleReply(env:DomainEnv,account:AccountRow,thread:ThreadRow,threadNative:string,messageId:string,text:string,messageAt:number):void{
  if(!thread.contact_id||isInboxOptOut(text)||isSuppressed(env.db,account.workspace_id,thread.peer_url,account.id))return;
- const books=env.db.prepare('SELECT * FROM reply_playbooks WHERE workspace_id=? AND account_id=? AND enabled=1 AND valid_until>=?').all<Playbook>(account.workspace_id,account.id,env.now());
- for(const book of books){if(env.db.prepare('SELECT message_id FROM reply_events WHERE message_id=? AND playbook_id=?').get(messageId,book.id))continue;const rule=approvedRule(env,book);if(!rule||!text.toLocaleLowerCase().includes(rule.contains.toLocaleLowerCase()))continue;
-  const authorization=env.db.prepare('SELECT created_at FROM plan_authorizations WHERE id=?').get<{created_at:number}>(book.authorization_id);if(!authorization||messageAt<authorization.created_at)continue;
+ const books=env.db.prepare('SELECT * FROM reply_playbooks WHERE workspace_id=? AND account_id=? AND enabled=1 AND valid_until>=?').all<ReplyPlaybookRow>(account.workspace_id,account.id,env.now());
+ for(const book of books){if(env.db.prepare('SELECT message_id FROM reply_events WHERE message_id=? AND playbook_id=?').get(messageId,book.id))continue;const scope=approvedReplyScope(env.db,book,env.now());if(!scope||!text.toLocaleLowerCase().includes(scope.rule.contains.toLocaleLowerCase()))continue;const {rule,policy,bounds}=scope;
+  const authorization=env.db.prepare('SELECT decided_at FROM approvals WHERE id=?').get<{decided_at:number|null}>(book.authorization_id);if(!authorization?.decided_at||messageAt<authorization.decided_at)continue;
   const count=env.db.prepare('SELECT COUNT(*) n,MAX(e.created_at) last FROM reply_events e JOIN inbox_messages m ON m.id=e.message_id JOIN inbox_threads t ON t.id=m.thread_id WHERE e.playbook_id=? AND t.contact_id=? AND e.action_id IS NOT NULL').get<{n:number;last:number|null}>(book.id,thread.contact_id)!;
-  const anyLast=env.db.prepare('SELECT MAX(e.created_at) last FROM reply_events e JOIN inbox_messages m ON m.id=e.message_id JOIN inbox_threads t ON t.id=m.thread_id WHERE t.workspace_id=? AND t.contact_id=? AND e.action_id IS NOT NULL').get<{last:number|null}>(account.workspace_id,thread.contact_id);if(anyLast?.last!==null&&anyLast?.last!==undefined&&env.now()-anyLast.last<24*3600000)continue;
+  const anyLast=env.db.prepare('SELECT MAX(e.created_at) last FROM reply_events e JOIN inbox_messages m ON m.id=e.message_id JOIN inbox_threads t ON t.id=m.thread_id WHERE t.workspace_id=? AND t.contact_id=? AND e.action_id IS NOT NULL').get<{last:number|null}>(account.workspace_id,thread.contact_id);if(anyLast?.last!==null&&anyLast?.last!==undefined&&env.now()-anyLast.last<bounds.contactMinGapHours*3600000)continue;
   if(count.n>=rule.maxResponsesPerContact||count.last!==null&&env.now()-count.last<rule.minGapHours*3600000)continue;
   const social=rule.channel!=='email';const adapter=env.adapters.get(account.provider);if(social?!adapter?.social?.message:!adapter?.email)continue;
   const contactPoint=env.db.prepare('SELECT id FROM contact_points WHERE workspace_id=? AND contact_id=? AND value_norm IN (?,?,?)').get<{id:string}>(account.workspace_id,thread.contact_id,normalized(thread.peer_url),normalized(thread.peer_url)+'/',thread.peer_url);if(!social&&!contactPoint)continue;
-  const payload={...(social?{channel:rule.channel,targetUrl:thread.peer_url,text:rule.text}:{from:JSON.parse(account.sender_identity),to:[{address:normalized(thread.peer_url)}],subject:rule.subject??'Re: Your message',text:rule.text,headers:{'Auto-Submitted':'auto-replied'},providerThreadId:threadNative}),_replyPlaybookId:book.id,_contactId:thread.contact_id,_replyRuleHash:digestCanonical(rule),_inboundMessageId:messageId,_policy:{limits:{accountPerDay:10,domainPerDay:3,channelPerDay:10},window:{timezone:'UTC',fallback:'UTC',days:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],start:'00:00',end:'23:59'},expireAfter:'P1D',approval:'every_action',firstBatchSize:20,unsubscribe:'reply',requirePostalAddress:false}};
+  const payload={...(social?{channel:rule.channel,targetUrl:thread.peer_url,text:rule.text}:{from:JSON.parse(account.sender_identity),to:[{address:normalized(thread.peer_url)}],subject:rule.subject??'Re: Your message',text:rule.text,headers:{'Auto-Submitted':'auto-replied'},providerThreadId:threadNative}),_replyPlaybookId:book.id,_contactId:thread.contact_id,_replyRuleHash:digestCanonical(rule),_inboundMessageId:messageId,_policy:policy};
   const action=enqueueAction(env.db,{workspaceId:account.workspace_id,kind:social?'social.message':'email.reply',payload,providerAccountId:account.id,purpose:social?'social_messaging':'automated_outreach',contactPointId:contactPoint?.id,recipient:social?thread.peer_url:normalized(thread.peer_url),dueAt:env.now(),notAfter:Math.min(book.valid_until,env.now()+86400000),approvalId:book.authorization_id,idempotencyKey:`reply:${book.id}:${messageId}`},actor(env.now()),env.now()).action;
   attachPlanAction(env,book.authorization_id,action);
   env.db.prepare('INSERT INTO reply_events(message_id,playbook_id,action_id,created_at) VALUES (?,?,?,?)').run(messageId,book.id,action.id,env.now());

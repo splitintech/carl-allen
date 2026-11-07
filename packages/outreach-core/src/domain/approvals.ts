@@ -133,6 +133,7 @@ export function revokeApproval(env: DomainEnv, ctx: AuthContext, approvalId: str
     const now = env.now();
     const approval = loadApproval(env.db, ctx.workspaceId, approvalId);
     if (!approval) throw new NotFoundError(`approval ${approvalId}`);
+    if (!['http','test'].includes(ctx.source) && env.db.prepare('SELECT id FROM plan_authorizations WHERE id=? AND workspace_id=?').get(approvalId,ctx.workspaceId)) throw new ForbiddenError('Plan revocation requires the signed-in Carl-Allen review screen');
     if (approval.decision !== 'approved' && approval.decision !== 'pending') throw new ConflictError(`approval is ${approval.decision}`);
     env.db.prepare(`UPDATE approvals SET decision = 'revoked', reason = ?, decided_at = ? WHERE id = ?`).run(reason, now, approvalId);
     stopPlanExecution(env,approvalId,'plan_revoked');

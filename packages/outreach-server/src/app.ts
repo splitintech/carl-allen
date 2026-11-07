@@ -1,3 +1,4 @@
+import { registerReplyPlaybookRoutes } from './routes-reply-playbooks';
 import { handleRemoteMcp } from '@splitin/outreach-mcp';
 import { authenticateCloudRequest } from './cloud-auth';
 import { registerWorkspaceRoutes } from './routes-workspace';
@@ -94,5 +95,6 @@ export function createApp(options: ServerOptions): Hono<ServerEnv> {
   registerAuthoringRoutes(app, engine);
   registerPublishingRoutes(app, engine);
   registerWorkspaceRoutes(app,engine);
+  registerReplyPlaybookRoutes(app,engine);
   return app;
 }

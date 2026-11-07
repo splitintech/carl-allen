@@ -11,6 +11,7 @@ import type { ActionRow } from '../execution/types';
 import { getWorkspaceExecutionLimits,newPlanPolicy } from './workspace-policy';
 import { mediaAsset } from './publishing-media';
 import { postIssues } from './publishing-drafts';
+import { createReplyPlaybook } from './reply-playbooks';
 export function renderWorkText(text:string,contact:WorkManifest['contacts'][number]):string {
  const values:Record<string,string>={full_name:contact.name,first_name:contact.name.split(/\s/)[0]??'',name:contact.name};
  return text.replace(/\{\{([a-z_]+)\}\}/g,(_,key:string)=>{if(!(key in values))throw new ConflictError('Unknown personalization token '+key);return values[key]!;});
@@ -20,6 +21,7 @@ function resolvePackage(env:DomainEnv,ctx:AuthContext,p:WorkPackage):{manifest:W
  if(configuredMediaStore()){const raw=env.db.prepare('SELECT extracted_data FROM work_packages WHERE id=?').get<{extracted_data:string}>(p.id)!;if(!JSON.parse(raw.extracted_data).originalRemoteReady)throw new ConflictError('Retry HTML upload to persist the original document in cloud storage');}
  const accountCap=getWorkspaceExecutionLimits(env,ctx).accountPerDay;
  const m=p.manifest;const issues:WorkPackageIssue[]=[];const issue=(field:string,message:string)=>issues.push({field,message});
+ for(const person of m.contacts)for(const channel of ['linkedin','instagram'] as const){const value=person[channel];if(!value)continue;const url=new URL(value);const valid=channel==='linkedin'?url.hostname==='www.linkedin.com'&&/^\/in\/[a-z0-9_-]+\/?$/.test(url.pathname):url.hostname==='www.instagram.com'&&/^\/[a-z0-9_.]{1,30}\/?$/.test(url.pathname)&&!/^\/(accounts|direct|explore|reels|stories|p)\/?$/.test(url.pathname);if(!valid||url.search||url.hash||url.port)issue(person.id,'Use a canonical '+channel+' personal profile URL with www, lowercase handle, and no tracking parameters. This is required for recipient and reply matching.');}
  const account=(ref:string,channel:string,kind:string)=>{
   const id=p.accountMap[ref];if(!id){issue(ref,'Map a connected account');return;}
   const r=env.db.prepare('SELECT health,capabilities,provider FROM provider_accounts WHERE workspace_id=? AND id=?').get<{health:string;capabilities:string;provider:string}>(ctx.workspaceId,id);
@@ -104,7 +106,7 @@ export function prepareWorkPackage(env:DomainEnv,ctx:AuthContext,id:string){
  }
  const validUntil=Math.max(m.outreachSequences.length?env.now()+SCHEDULE_HORIZON_MS:env.now()+3600000,...actions.map(a=>a.due_at+3600000),...m.replyPlaybooks.map(r=>Date.parse(r.validUntil)));
  const authorization=createPlanAuthorization(env,ctx,id,actions,{manifest:m,accountMap:p.accountMap,mediaMap:p.mediaMap},validUntil);
- for(const rule of m.replyPlaybooks)env.db.prepare('INSERT INTO reply_playbooks(id,workspace_id,package_id,account_id,authorization_id,rules,valid_until) VALUES (?,?,?,?,?,?,?)').run(ulid(env.now()),ctx.workspaceId,id,p.accountMap[rule.accountRef]!,authorization.authorizationId,JSON.stringify(rule),Date.parse(rule.validUntil));
+ for(const rule of m.replyPlaybooks)createReplyPlaybook(env,ctx,id,p.accountMap[rule.accountRef]!,rule,authorization.authorizationId);
  env.db.prepare("UPDATE work_packages SET status='awaiting_approval',authorization_id=?,issues='[]',updated_at=? WHERE id=?").run(authorization.authorizationId,env.now(),id);
  audit(env.db,ctx,env.now(),'work_package',id,'prepared',{hash:digestCanonical(m),count:actions.length});
  return {package:getWorkPackage(env,ctx,id),...authorization,preview:{posts:m.publishingPlans,contacts:m.contacts,sequences:m.outreachSequences,replyPlaybooks:m.replyPlaybooks,issues:[],executionWindowUntil:validUntil,renderedActions:actions.map(a=>({id:a.id,accountId:a.provider_account_id,recipient:a.recipient_norm,dueAt:a.due_at,payload:JSON.parse(a.payload)}))}};

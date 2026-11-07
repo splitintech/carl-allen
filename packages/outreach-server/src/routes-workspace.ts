@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { extractWorkPackage, workPackageTemplate } from '@splitin/outreach-import';
-import { getWorkspaceExecutionLimits,setWorkspaceExecutionLimits,workspaceMediaQuota,putImmutableDocument,configuredMediaStore,storeWorkPackage,getWorkPackage,listWorkPackages,repairWorkPackage,prepareWorkPackage,decideApproval,listPeople,listOutreachSequences,pauseOutreachSequence,listInboxThreads,updateInboxThread,workspaceInsights,listTeam,inviteTeamMember,requireRole,ConflictError, type Engine } from '@splitin/outreach-core';
+import { getWorkspaceExecutionLimits,setWorkspaceExecutionLimits,workspaceMediaQuota,putImmutableDocument,configuredMediaStore,storeWorkPackage,getWorkPackage,listWorkPackages,repairWorkPackage,prepareWorkPackage,decideApproval,listPeople,listOutreachSequences,pauseOutreachSequence,listInboxThreads,listInboxMonitoring,updateInboxThread,workspaceInsights,listTeam,inviteTeamMember,requireRole,ConflictError, type Engine } from '@splitin/outreach-core';
 import type { Hono } from 'hono';
 import { auth, type ServerEnv } from './app';
 const page=z.object({cursor:z.string().max(200).optional(),limit:z.coerce.number().int().min(1).max(200).default(100)}).passthrough();
@@ -29,6 +29,7 @@ export function registerWorkspaceRoutes(app:Hono<ServerEnv>,engine:Engine):void 
  app.get('/v1/people',(c)=>{const q=page.parse(c.req.query());const people=listPeople(engine,auth(c),q.cursor,q.limit);return c.json({people,nextCursor:people.length===q.limit?people.at(-1)?.id:null});});
  app.get('/v1/outreach/sequences',(c)=>{const q=page.parse(c.req.query());const sequences=listOutreachSequences(engine,auth(c),q.cursor,q.limit);return c.json({sequences,nextCursor:sequences.length===q.limit?sequences.at(-1)?.id:null});});
  app.post('/v1/outreach/sequences/:id/pause',(c)=>c.json(pauseOutreachSequence(engine,auth(c),c.req.param('id'))));
+ app.get('/v1/inbox/monitoring',(c)=>c.json({monitoring:listInboxMonitoring(engine,auth(c))}));
  app.get('/v1/inbox/threads',(c)=>{const q=page.parse(c.req.query());const threads=listInboxThreads(engine,auth(c),q.cursor,q.limit);return c.json({threads,nextCursor:threads.length===q.limit?threads.at(-1)?.id:null});});
  app.patch('/v1/inbox/threads/:id',async(c)=>c.json(updateInboxThread(engine,auth(c),c.req.param('id'),z.object({assignedTo:z.string().nullable().optional(),notes:z.string().max(10000).optional()}).strict().parse(await c.req.json()))));
  app.get('/v1/settings/policy',(c)=>c.json({policy:getWorkspaceExecutionLimits(engine,auth(c))}));

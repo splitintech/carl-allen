@@ -1,0 +1,65 @@
+import { readFileSync } from 'node:fs';
+import { extname, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { expect, it } from 'vitest';
+import { chromium, type Page } from 'playwright';
+import { WorkPackageManifest, type WorkManifest } from '@splitin/outreach-contracts';
+const root = resolve('apps/papr/bundle/apps/outreach-console');
+type SourceRow = Record<string, string>;
+type Spec = { destination: 'contacts' | 'publications' | 'outreach'; columns: Record<string, string>; defaults: Record<string, string> };
+type Mapping = { manifest: WorkManifest; rows: unknown[]; errors: string[]; repairs: string[] };
+const mapper = await import(pathToFileURL(resolve(root, 'publishing/import-mapping.js')).href) as { mapImportRows(manifest: WorkManifest, rows: SourceRow[], spec: Spec): Mapping };
+const values = await import(pathToFileURL(resolve(root, 'publishing/import-mapping-values.js')).href) as { isoSchedule(value: string): boolean; sourceTable(pack: unknown, index: number): { rows: SourceRow[]; headers: string[] } };
+const when = '2026-11-10T09:00:00-05:00';
+function manifest(): WorkManifest { return WorkPackageManifest.parse({ schemaVersion: 1, packageId: 'mapping-fixture', revision: 1, name: 'Mapping fixture', contacts: [{ id: 'contact-1', name: 'Ada', email: 'ada@example.invalid', linkedin: 'https://www.linkedin.com/in/ada/', sources: ['https://example.invalid/research'] }] }); }
+const spec = (destination: Spec['destination'], columns: Spec['columns'], defaults: Spec['defaults'] = {}): Spec => ({ destination, columns, defaults });
+it('retains original sources, inert notes and existing contacts while allocating unused contact IDs', () => {
+  const source = [{ Name: 'Lin', Email: 'lin@example.invalid', Source: 'https://example.invalid/lin?study=1', Notes: '<script>globalThis.mapperExecuted=true</script>', Approval: 'approved', Token: 'ignored' }]; const before = JSON.stringify(source); const original = manifest();
+  const table = values.sourceTable({ extractedTables: [source] }, 0); const mapped = mapper.mapImportRows(original, table.rows, spec('contacts', { name: 'Name', email: 'Email', sources: 'Source', notes: 'Notes' }));
+  expect(mapped.errors).toEqual([]); expect(mapped.manifest.contacts[0]).toEqual(original.contacts[0]); expect(mapped.manifest.contacts[1]).toMatchObject({ id: 'contact-2', sources: ['https://example.invalid/lin?study=1'], notes: source[0]!.Notes, consentBasis: 'unknown' });
+  expect(JSON.stringify(source)).toBe(before); expect(original.contacts).toHaveLength(1); expect(WorkPackageManifest.safeParse(mapped.manifest).success).toBe(true); expect(JSON.stringify(mapped.manifest)).not.toContain('"Approval"'); expect(JSON.stringify(mapped.manifest)).not.toContain('"Token"');
+});
+it('maps publications, preserves existing work and creates shared media and logical account repair references', () => {
+  const original = manifest(); original.media = [{ id: 'media-1', name: 'existing.png' }]; original.publishingPlans = [{ id: 'post-1', accountRef: 'old', channel: 'x', text: 'Keep me', media: [], scheduledFor: when, format: 'feed', tags: [] }]; original.accountRefs = [{ id: 'old', label: 'Existing account', channel: 'x' }];
+  const source = [{ Caption: '  Exact caption\n<script>inert()</script>  ', Date: when, Account: 'founder', Platform: 'linkedin', Files: 'cover.png;existing.png' }, { Caption: 'Second caption', Date: when, Account: 'company', Platform: 'linkedin', Files: 'cover.png' }];
+  const mapped = mapper.mapImportRows(original, source, spec('publications', { text: 'Caption', scheduledFor: 'Date', accountRef: 'Account', channel: 'Platform', media: 'Files' }));
+  expect(mapped.errors).toEqual([]); expect(mapped.manifest.publishingPlans[0]).toEqual(original.publishingPlans[0]); expect(mapped.manifest.publishingPlans.map((post) => post.id)).toEqual(['post-1', 'post-2', 'post-3']); expect(mapped.manifest.publishingPlans[1]?.text).toBe(source[0]!.Caption);
+  expect(mapped.manifest.media).toEqual([{ id: 'media-1', name: 'existing.png' }, { id: 'media-2', name: 'cover.png' }]); expect(mapped.manifest.publishingPlans[1]?.media).toEqual(['media-2', 'media-1']); expect(mapped.manifest.publishingPlans[2]?.media).toEqual(['media-2']); expect(mapped.manifest.accountRefs.map((ref) => ref.id)).toEqual(['old', 'founder', 'company']);
+  expect(mapped.repairs).toContain('Map logical account founder to a connected linkedin account after saving.'); expect(mapped.repairs).toContain('Upload and map media file cover.png after saving.'); expect(mapped.manifest.contacts).toEqual(original.contacts); expect(WorkPackageManifest.safeParse(mapped.manifest).success).toBe(true);
+});
+it('rejects malformed dates and account mismatches without inferring local or DST schedules', () => {
+  for (const value of ['2026-11-01T01:30:00', '11/10/2026', '2026-02-31T09:00:00Z', '2026-11-10T24:00:00Z', '2026-11-10T09:00:00+99:00']) expect(values.isoSchedule(value), value).toBe(false);
+  expect(values.isoSchedule('2026-11-01T01:30:00-04:00')).toBe(true); expect(values.isoSchedule('2026-11-01T01:30:00-05:00')).toBe(true);
+  const original = manifest(); original.accountRefs = [{ id: 'founder', label: 'Founder', channel: 'linkedin' }];
+  const mapped = mapper.mapImportRows(original, [{ Caption: 'Post', Date: '2026-02-31T09:00:00Z', File: '../cover.png' }], spec('publications', { text: 'Caption', scheduledFor: 'Date', media: 'File' }, { accountRef: 'founder', channel: 'instagram' }));
+  expect(mapped.errors.join('\n')).toContain('belongs to linkedin'); expect(mapped.errors.join('\n')).toContain('real ISO date'); expect(mapped.errors.join('\n')).toContain('local filenames');
+});
+it('groups reviewed outreach rows in source order and resolves only known contact IDs or channel addresses', () => {
+  const original = manifest(); const columns = { recipient: 'Recipient', sequence: 'Sequence', scheduledFor: 'Start', accountRef: 'Account', channel: 'Channel', kind: 'Kind', text: 'Message', subject: 'Subject', waitHours: 'Wait' };
+  const source = [{ Recipient: 'ADA@example.invalid', Sequence: 'Research follow-up', Start: when, Account: 'sender', Channel: 'email', Kind: 'email', Message: 'Hello {{first_name}}', Subject: 'Research', Wait: '0' }, { Recipient: 'contact-1', Sequence: 'Research follow-up', Start: when, Account: 'sender', Channel: 'email', Kind: 'email', Message: 'Follow-up', Subject: 'Following up', Wait: '24' }];
+  const mapped = mapper.mapImportRows(original, source, spec('outreach', columns));
+  expect(mapped.errors).toEqual([]); expect(mapped.manifest.outreachSequences).toHaveLength(1); expect(mapped.manifest.outreachSequences[0]).toMatchObject({ contacts: ['contact-1'], scheduledFor: when, steps: [{ id: 'step-1', text: 'Hello {{first_name}}', waitHours: 0 }, { id: 'step-2', text: 'Follow-up', waitHours: 24 }] }); expect(mapped.repairs.join('\n')).toContain('does not establish consent'); expect(WorkPackageManifest.safeParse(mapped.manifest).success).toBe(true);
+  const missing = mapper.mapImportRows(original, [{ ...source[0]!, Recipient: 'nobody@example.invalid' }], spec('outreach', columns)); expect(missing.errors.join('\n')).toContain('match exactly one imported contact'); expect(missing.manifest.contacts).toEqual(original.contacts);
+  const wrongChannel = mapper.mapImportRows(original, [{ ...source[0]!, Recipient: 'contact-1', Channel: 'instagram', Kind: 'message' }], spec('outreach', columns)); expect(wrongChannel.errors.join('\n')).toContain('has no instagram address');
+  const conflicting = mapper.mapImportRows(original, [source[0]!, { ...source[1]!, Start: '2026-11-11T09:00:00-05:00', Wait: '', Subject: '' }], spec('outreach', columns)); expect(conflicting.errors.join('\n')).toContain('same schedule and recipients'); expect(conflicting.errors.join('\n')).toContain('explicit number'); expect(conflicting.errors.join('\n')).toContain('explicit subject');
+});
+const enabled = process.env.OUTREACH_BROWSER_FIXTURES === '1';
+const executablePath = process.env.OUTREACH_TEST_CHROME || chromium.executablePath();
+async function fixture(page: Page, table: SourceRow[]) {
+  const blocked: string[] = []; await page.route('**/*', async (route) => { const url = new URL(route.request().url()); if (url.origin !== 'https://mapping.test') { blocked.push(url.href); return route.abort(); } if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: '<!doctype html><html><body><div id="studio-toast"></div></body></html>' }); const path = resolve(root, url.pathname.slice(1)); return route.fulfill({ contentType: extname(path) === '.js' ? 'application/javascript' : 'text/plain', body: readFileSync(path) }); });
+  await page.goto('https://mapping.test/'); await page.evaluate(`(async()=>{const {mappingWizard}=await import('/publishing/import-mapping.js');globalThis.savedMappings=[];document.body.append(mappingWizard({extractedTables:[${JSON.stringify(table)}]},${JSON.stringify(manifest())},{roles:['admin']},async manifest=>{globalThis.savedMappings.push(manifest)}));})()`); return blocked;
+}
+async function saved(page: Page): Promise<WorkManifest[]> { return page.evaluate('globalThis.savedMappings'); }
+it.skipIf(!enabled)('requires publication preview and explicit date repair, then saves inert text and account/media references without effects', async () => {
+  const browser = await chromium.launch({ executablePath, headless: true }); try { const page = await browser.newPage(); const script = '<script>globalThis.mapperExecuted=true</script><img src="https://tracker.invalid/pixel">'; const blocked = await fixture(page, [{ Caption: script, Date: 'Nov 10 at 9', Account: 'founder', Platform: 'linkedin', Media: 'cover.png' }]);
+    await page.getByLabel('Mapping destination', { exact: true }).selectOption('publications'); expect(await page.getByRole('button', { name: 'Save mapped rows', exact: true }).isDisabled()).toBe(true); await page.getByRole('button', { name: 'Preview mapped rows', exact: true }).click(); expect(await page.getByRole('alert').textContent()).toContain('real ISO date'); expect(await saved(page)).toEqual([]);
+    await page.getByLabel('Schedule column', { exact: true }).selectOption(''); await page.getByLabel('Shared scheduledFor', { exact: true }).fill(when); await page.getByRole('button', { name: 'Preview mapped rows', exact: true }).click(); expect(await page.getByLabel('Source row preview', { exact: true }).inputValue()).toContain('Nov 10 at 9'); expect(await page.getByLabel('Mapped row preview', { exact: true }).inputValue()).toContain(when); expect(await saved(page)).toHaveLength(0);
+    await page.getByRole('button', { name: 'Save mapped rows', exact: true }).click(); await expect.poll(async () => (await saved(page)).length).toBe(1); const value = (await saved(page))[0]!; expect(value.publishingPlans[0]).toMatchObject({ text: script, accountRef: 'founder', media: ['media-1'], scheduledFor: when }); expect(value.contacts).toEqual(manifest().contacts); expect(await page.evaluate('globalThis.mapperExecuted')).toBeUndefined(); expect(blocked).toEqual([]); expect(await page.locator('script,img,iframe').count()).toBe(0);
+  } finally { await browser.close(); }
+}, 30000);
+it.skipIf(!enabled)('blocks unknown outreach recipients until the operator explicitly selects an imported contact', async () => {
+  const browser = await chromium.launch({ executablePath, headless: true }); try { const page = await browser.newPage(); await fixture(page, [{ Recipient: 'nobody@example.invalid', Sequence: 'Follow-up', Start: when, Account: 'sender', Channel: 'email', Kind: 'email', Message: 'Hello', Subject: 'Reviewed subject', 'Wait hours': '0' }, { Recipient: 'nobody@example.invalid', Sequence: 'Follow-up', Start: when, Account: 'sender', Channel: 'email', Kind: 'email', Message: 'Following up', Subject: 'Reviewed follow-up', 'Wait hours': '24' }]);
+    await page.getByLabel('Mapping destination', { exact: true }).selectOption('outreach'); await page.getByRole('button', { name: 'Preview mapped rows', exact: true }).click(); expect(await page.getByRole('alert').textContent()).toContain('match exactly one imported contact'); expect(await page.getByRole('button', { name: 'Save mapped rows', exact: true }).isDisabled()).toBe(true);
+    await page.getByLabel('Recipient IDs or addresses column', { exact: true }).selectOption(''); await page.getByLabel('Shared recipient', { exact: true }).selectOption('contact-1'); await page.getByRole('button', { name: 'Preview mapped rows', exact: true }).click(); expect(await page.getByLabel('Mapped row preview', { exact: true }).inputValue()).toContain('contact-1'); expect(await saved(page)).toEqual([]); await page.getByRole('button', { name: 'Save mapped rows', exact: true }).click(); await expect.poll(async () => (await saved(page)).length).toBe(1); expect((await saved(page))[0]!.outreachSequences[0]).toMatchObject({ contacts: ['contact-1'], steps: [{ text: 'Hello', waitHours: 0 }, { text: 'Following up', waitHours: 24 }] });
+  } finally { await browser.close(); }
+}, 30000);
