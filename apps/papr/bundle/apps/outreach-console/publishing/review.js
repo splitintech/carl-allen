@@ -1,4 +1,5 @@
-import { el, button, modal, busy, notify, badge, dateText } from './utils.js';
+import { renderDelivery } from './delivery.js';
+import { el, button, field, modal, busy, notify, badge, dateText } from './utils.js';
 import { platform, accountName } from './model.js';
 import { api } from './service.js';
 export function reviewDraft(draft, data, refresh, edit) {
@@ -15,7 +16,7 @@ export function reviewDraft(draft, data, refresh, edit) {
     if (result.blocked?.length) { notify(`Not scheduled: ${result.blocked.map((b) => `${platform(b.channel).name}: ${b.reason}`).join(' · ')}`); area.append(el('div', { class: 'validation-errors', role: 'alert', text: result.blocked.map((b) => `${platform(b.channel).name}: ${b.reason}`).join('\n') })); await refresh(); return; }
     if (result.authorizationId && result.operationHash && data.roles?.some((role) => ['admin', 'approver'].includes(role))) {
       const approve = button('Approve this exact plan', () => busy(approve, async () => { await api('plan-approve', { authorizationId: result.authorizationId, operationHash: result.operationHash }); m.close(); await refresh(); notify('Plan approved. Each account keeps its own delivery state.'); }), 'primary');
-      area.append(el('div', { class: 'import-receipt', text: `${result.actions.length} publications prepared. Review the complete plan above before approving.` })); m.bottom.replaceChildren(button('Close', m.close), approve); await refresh(); return;
+      area.append(el('div', { class: 'import-receipt', text: `${result.actions.length} publications prepared. Review the complete plan above before approving.` })); m.bottom.replaceChildren(button('Close', m.close), button('Reject this exact plan',()=>rejectExactPlan(result.authorizationId,result.operationHash,async()=>{m.close();await refresh();notify('Plan rejected. No work was approved.');}),'danger'), approve); await refresh(); return;
     }
     m.close(); await refresh(); notify(`${result.actions.length} post${result.actions.length === 1 ? '' : 's'} queued for approval. Nothing has been published yet.`);
   }), 'primary'); submit.disabled = errors;
@@ -24,7 +25,7 @@ export function reviewDraft(draft, data, refresh, edit) {
 export function reviewAction(action, data, refresh, edit) {
   const p = platform(action.channel); const account = data.accounts.find((a) => a.id === action.providerAccountId); const m = modal(`${p.name} post details`, 'Current engine state and approved content.'); const content = el('div', { class: 'review-content' });
   content.append(el('div', { class: 'review-entry' }, el('div', { class: 'review-heading' }, el('strong', { text: accountName(account) }), badge(action.state)), el('p', { text: action.text }), el('small', { text: dateText(action.dueAt) }), el('div', { class: 'review-media' }, ...action.mediaIds.map((id) => el('span', { text: data.media.find((a) => a.id === id)?.name || 'Media attachment' }))), el('details', {}, el('summary', { class: 'field-help', text: 'Approval details' }), el('small', { text: `Content hash: ${action.operationHash}` })), action.reason ? el('p', { class: 'field-help', text: action.reason }) : null));
-  if (['uncertain', 'review', 'failed'].includes(action.state)) content.append(el('p', { class: 'field-help', text: 'Check the account and resolve this result in the Outreach console before creating another attempt. A post may already exist when its result is uncertain.' }), el('a', { class: 'button small', href: 'index.html#review', text: 'Open delivery review' }));
+  content.append(renderDelivery(action));
   m.content.append(content); m.bottom.append(button('Close', m.close));
   if (action.state === 'awaiting_approval' && action.authorizationId) { const draft = data.drafts.find((item) => item.id === action.draftId); content.append(el('p', { class: 'field-help', text: 'This publication belongs to a complete plan. Review all accounts and posts before approving the full manifest.' })); if (draft && edit) m.bottom.append(button('Review complete plan', () => { m.close(); reviewDraft(draft, data, refresh, edit); }, 'primary')); }
   if (action.state === 'awaiting_approval' && !action.authorizationId && action.approvalId && (!data.roles?.length || data.roles.some((role) => ['admin', 'approver'].includes(role)))) {
@@ -34,4 +35,10 @@ export function reviewAction(action, data, refresh, edit) {
   if (['planned', 'awaiting_approval', 'scheduled', 'retryable'].includes(action.state)) {
     const cancel = button('Cancel this post', () => busy(cancel, async () => { await api('action-cancel', { actionId: action.id, reason: 'Cancelled from Publishing Studio' }); m.close(); await refresh(); notify('Post cancelled.'); }), 'danger'); m.bottom.append(cancel);
   }
+}
+
+export function rejectExactPlan(approvalId,operationHash,done) {
+  const m=modal('Reject this exact plan','Explain the changes needed. Rejection cancels its unattempted work and creates no external effects.',true);
+  const reason=el('textarea',{class:'field-control',rows:4,maxlength:500,required:'',name:'rejectionReason',autocomplete:'off'});const error=el('p',{class:'validation-errors',role:'alert',hidden:''});m.content.append(field('Reason for rejection',reason),error);
+  const reject=button('Confirm rejection',()=>busy(reject,async()=>{const text=reason.value.trim();if(!text){error.hidden=false;error.textContent='Enter a reason before rejecting this plan.';reason.focus();return;}await api('approval-decide',{approvalId,operationHash,decision:'rejected',reason:text});m.close();await done();}),'danger');m.bottom.append(button('Keep reviewing',m.close),reject);reason.focus();
 }

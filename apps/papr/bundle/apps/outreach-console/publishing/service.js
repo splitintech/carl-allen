@@ -7,6 +7,10 @@ const id = (value) => { if (typeof value !== 'string' || (value.length < 1 || va
 const pageQuery = (p) => { const q = new URLSearchParams(); for (const key of ['from', 'to', 'cursor', 'limit', 'accountId', 'channel']) if (p[key] !== undefined && p[key] !== '') q.set(key, String(p[key])); return q.size ? `?${q}` : ''; };
 export function restAction(action, p = {}) {
   const map = {
+    'reply-playbooks':()=>['GET','/v1/reply-playbooks'+pageQuery(p)],
+    'reply-playbook-review':()=>['GET',`/v1/reply-playbooks/${id(p.playbookId)}`],
+    'reply-playbook-decide':()=>['POST',`/v1/reply-playbooks/${id(p.playbookId)}/decide`,{decision:p.decision,operationHash:p.operationHash,reason:p.reason}],
+    'reply-playbook-revoke':()=>['POST',`/v1/reply-playbooks/${id(p.playbookId)}/revoke`,{reason:p.reason}],
     'policy-settings':()=>['GET','/v1/settings/policy'],
     'policy-settings-save':()=>['PATCH','/v1/settings/policy',p.input],
     'storage-settings': () => ['GET','/v1/settings/media'],
@@ -44,6 +48,8 @@ export function restAction(action, p = {}) {
     'plan-approve': () => ['POST', `/v1/plan-authorizations/${id(p.authorizationId)}/approve`, { operationHash: p.operationHash }],
     'people-list': () => ['GET', '/v1/people'+pageQuery(p)], 'outreach-list': () => ['GET', '/v1/outreach/sequences'+pageQuery(p)],
     'outreach-pause': () => ['POST', `/v1/outreach/sequences/${id(p.sequenceId)}/pause`, {}],
+    'action-details':()=>['GET',`/v1/actions/${id(p.actionId)}`],
+    'inbox-monitoring':()=>['GET','/v1/inbox/monitoring'],
     'inbox-list': () => ['GET', '/v1/inbox/threads'+pageQuery(p)],
     'inbox-assign': () => ['PATCH', `/v1/inbox/threads/${id(p.threadId)}`, { assignedTo: p.principalId, notes:p.notes }],
     insights: () => ['GET', '/v1/insights'], 'team-list': () => ['GET', '/v1/team'],

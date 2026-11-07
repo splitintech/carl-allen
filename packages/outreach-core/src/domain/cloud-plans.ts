@@ -5,6 +5,7 @@ import { actorOf, audit, ConflictError, ForbiddenError, requireRole, type AuthCo
 import type { DomainEnv } from './env';
 import { transitionAction } from '../execution/actions-repo';
 import type { ActionRow, PreflightVerdict } from '../execution/types';
+import { replyScopeIssue, type ReplyPlaybookRow } from './reply-playbook-scope';
 export const SCHEDULE_HORIZON_MS = 90 * 86400000;
 export const PUBLISHING_GRACE_MS = 3600000;
 export interface PlanAuthorization { id: string; workspace_id: string; subject_id: string; manifest_hash: string; valid_until: number; created_at: number }
@@ -44,6 +45,8 @@ export function planVerdict(db:SqlDatabase,action:ActionRow,now:number):Prefligh
  if(approval?.decision!=='approved')return {kind:'await_approval',reason:'plan_not_approved'};
  if(approval.operation_hash!==plan.manifest_hash||now>plan.valid_until)return {kind:'await_approval',reason:'plan_expired_or_changed'};
  const preview=JSON.parse(approval.preview) as {validUntil?:number};if(preview.validUntil!==plan.valid_until||digestCanonical(preview)!==plan.manifest_hash)return{kind:'await_approval',reason:'plan_expired_or_changed'};
+ const reply=JSON.parse(action.payload) as {_replyPlaybookId?:string};
+ if(reply._replyPlaybookId){const book=db.prepare('SELECT * FROM reply_playbooks WHERE workspace_id=? AND id=? AND authorization_id=?').get<ReplyPlaybookRow>(action.workspace_id,reply._replyPlaybookId,plan.id);if(!book?.enabled||replyScopeIssue(db,book,now))return{kind:'await_approval',reason:'reply_scope_changed_or_disabled'};}
  const item=db.prepare('SELECT * FROM plan_actions WHERE authorization_id=? AND action_id=?').get<FrozenAction>(plan.id,action.id);
  if(!item||!frozenMatches(item,action)||item.content_hash!==action.content_hash||digestCanonical(JSON.parse(action.payload))!==action.content_hash)return {kind:'await_approval',reason:'plan_hash_mismatch'};
  if(action.kind==='social.publish'&&now>item.approved_due_at+PUBLISHING_GRACE_MS)return {kind:'review',reason:'missed_publishing_slot'};
@@ -55,22 +58,34 @@ export function assertPlanDecision(env:DomainEnv,ctx:AuthContext,id:string,hash:
  if(ctx.source!=='http'&&ctx.source!=='test')throw new ForbiddenError('Plan approval requires the signed-in Carl-Allen review screen');
  if(plan.manifest_hash!==hash||env.now()>plan.valid_until)throw new ConflictError('Plan changed or execution window expired; prepare it again');
  const approval=env.db.prepare('SELECT preview FROM approvals WHERE id=?').get<{preview:string}>(id);if(!approval||digestCanonical(JSON.parse(approval.preview))!==hash||(JSON.parse(approval.preview) as {validUntil?:number}).validUntil!==plan.valid_until)throw new ConflictError('Plan preview changed; fresh review required');
+ const book=env.db.prepare('SELECT * FROM reply_playbooks WHERE workspace_id=? AND authorization_id=?').get<ReplyPlaybookRow>(ctx.workspaceId,id);
+ if((JSON.parse(approval.preview) as {summary?:{kind?:string}}).summary?.kind==='reply_playbook'){const issue=book?replyScopeIssue(env.db,book,env.now()):'reply_playbook_missing';if(issue)throw new ConflictError('Reply playbook changed; fresh review required: '+issue);}
  const rows=env.db.prepare('SELECT a.* FROM plan_actions p JOIN scheduled_actions a ON a.id=p.action_id WHERE p.authorization_id=?').all<ActionRow>(id);
  for(const a of rows){const item=env.db.prepare('SELECT * FROM plan_actions WHERE authorization_id=? AND action_id=?').get<FrozenAction>(id,a.id);if(a.state!=='awaiting_approval'||!item||!frozenMatches(item,a)||a.content_hash!==item.content_hash||digestCanonical(JSON.parse(a.payload))!==item.content_hash)throw new ConflictError('Plan actions changed; fresh review required');}
 }
 export function completePlanDecision(env:DomainEnv,id:string,approved:boolean):void {
  const p=env.db.prepare('SELECT subject_id FROM plan_authorizations WHERE id=?').get<{subject_id:string}>(id);
  if(!p)return;
+ const approval=env.db.prepare('SELECT preview FROM approvals WHERE id=?').get<{preview:string}>(id);
+ if(approval&&(JSON.parse(approval.preview) as {summary?:{kind?:string}}).summary?.kind==='reply_playbook'){env.db.prepare('UPDATE reply_playbooks SET enabled=? WHERE authorization_id=?').run(approved?1:0,id);return;}
  env.db.prepare('UPDATE work_packages SET status=?,updated_at=? WHERE authorization_id=?').run(approved?'scheduled':'ready_for_review',env.now(),id);
  env.db.prepare("UPDATE outreach_sequences SET state=?,updated_at=? WHERE package_id=? AND state='awaiting_approval'").run(approved?'active':'rejected',env.now(),p.subject_id);
- if(!approved)env.db.prepare('UPDATE reply_playbooks SET enabled=0 WHERE authorization_id=?').run(id);
+ if(!approved)stopPlanExecution(env,id,'plan_rejected');
 }
 export function stopPlanExecution(env:DomainEnv,authorizationId:string,reason:string):void {
  const plan=env.db.prepare('SELECT workspace_id,subject_id FROM plan_authorizations WHERE id=?').get<{workspace_id:string;subject_id:string}>(authorizationId);if(!plan)return;
+ const approval=env.db.prepare('SELECT preview FROM approvals WHERE id=?').get<{preview:string}>(authorizationId);
+ const child=approval&&(JSON.parse(approval.preview) as {summary?:{kind?:string}}).summary?.kind==='reply_playbook';
+ const ids=child?[authorizationId]:[authorizationId,...env.db.prepare('SELECT authorization_id FROM reply_playbooks WHERE workspace_id=? AND package_id=?').all<{authorization_id:string}>(plan.workspace_id,plan.subject_id).map(r=>r.authorization_id)];
+ if(!child){
  env.db.prepare("UPDATE work_packages SET status='ready_for_review',updated_at=? WHERE authorization_id=?").run(env.now(),authorizationId);
  env.db.prepare("UPDATE outreach_sequences SET state='stopped',stop_reason=?,updated_at=? WHERE package_id=? AND state IN ('active','paused','awaiting_approval')").run(reason,env.now(),plan.subject_id);
- env.db.prepare('UPDATE reply_playbooks SET enabled=0 WHERE authorization_id=?').run(authorizationId);
- for(const a of env.db.prepare('SELECT a.* FROM scheduled_actions a JOIN plan_actions p ON p.action_id=a.id WHERE p.authorization_id=? AND a.workspace_id=?').all<ActionRow>(authorizationId,plan.workspace_id))if(CANCELLABLE_ACTION_STATES.includes(a.state))transitionAction(env.db,a,'cancelled',env.now(),{kind:'system',id:'plan-authorization',source:'worker',traceId:ulid(env.now())},{state_reason:reason,lease_owner:null,lease_expires_at:null});
+ }
+ for(const id of new Set(ids)){
+  if(id!==authorizationId)env.db.prepare("UPDATE approvals SET decision='revoked',reason=?,decided_at=? WHERE id=? AND workspace_id=? AND decision IN ('pending','approved')").run(reason,env.now(),id,plan.workspace_id);
+  env.db.prepare('UPDATE reply_playbooks SET enabled=0 WHERE authorization_id=? AND workspace_id=?').run(id,plan.workspace_id);
+  for(const a of env.db.prepare('SELECT a.* FROM scheduled_actions a JOIN plan_actions p ON p.action_id=a.id WHERE p.authorization_id=? AND a.workspace_id=?').all<ActionRow>(id,plan.workspace_id))if(CANCELLABLE_ACTION_STATES.includes(a.state)||a.state==='review')transitionAction(env.db,a,'cancelled',env.now(),{kind:'system',id:'plan-authorization',source:'worker',traceId:ulid(env.now())},{state_reason:reason,lease_owner:null,lease_expires_at:null});
+ }
 }
 export function revokePackagePlan(env:DomainEnv,ctx:AuthContext,packageId:string,options:{supersede?:boolean}={}):void {
  const rows=env.db.prepare('SELECT a.* FROM scheduled_actions a JOIN plan_actions pa ON pa.action_id=a.id JOIN plan_authorizations p ON p.id=pa.authorization_id WHERE p.workspace_id=? AND p.subject_id=?').all<ActionRow>(ctx.workspaceId,packageId);

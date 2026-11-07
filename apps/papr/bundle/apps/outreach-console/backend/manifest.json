@@ -684,6 +684,78 @@
         "OUTREACH_CONNECTION_FILE"
       ],
       "timeoutMs": 120000
+    },
+    "action-details": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "inbox-monitoring": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "reply-playbooks": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "reply-playbook-review": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "reply-playbook-decide": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "reply-playbook-revoke": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
     }
   }
 }

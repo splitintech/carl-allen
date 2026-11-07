@@ -6,6 +6,8 @@ import { storeWorkPackage, repairWorkPackage, getWorkPackage } from './work-pack
 import { prepareWorkPackage } from './work-package-prepare';
 import { decideApproval } from './approvals';
 import { savePublishingDraft, submitPublishingDraft } from './publishing-drafts';
+import { ingestConversation } from './inbox-sync';
+import { loadAccount } from '../execution/actions-repo';
 import { setKillSwitchAs } from '../engine';
 import { listPeople } from './outreach-workspace';
 const open: Awaited<ReturnType<typeof makeDomainEnv>>[]=[];
@@ -23,6 +25,11 @@ function store(e:Awaited<ReturnType<typeof makeDomainEnv>>,m:ReturnType<typeof m
  return storeWorkPackage(e.engine,e.operator,{name:m.name,html,manifest:m,issues:[],sourceHash:sha256Hex(html)});
 }
 describe('HTML work-package durable execution',()=>{
+ it('requires canonical sourced profile repair before outreach, then stops linked email on a native reply',async()=>{
+  const {e,first}=await fixture();const m=manifest(e.now());m.publishingPlans=[];m.accountRefs=[{id:'a',channel:'linkedin',label:'Social'},{id:'mail',channel:'email',label:'Mailbox'}];m.contacts=[{id:'peer',name:'Ada Peer',linkedin:'https://linkedin.com/in/peer/?trk=research',email:'peer@example.org',sources:['https://example.org/research'],notes:'Sourced profile',consentBasis:'legitimate_interest',jurisdiction:'US'}];m.outreachSequences=[{id:'sequence',name:'Coordinated outreach',contacts:['peer'],scheduledFor:new Date(e.now()+3600000).toISOString(),steps:[{id:'social',accountRef:'a',channel:'linkedin',kind:'message',text:'Hello {{first_name}}',waitHours:0,waitFor:'elapsed'},{id:'email',accountRef:'mail',channel:'email',kind:'email',text:'Following up {{first_name}}',subject:'Reviewed follow-up',waitHours:24,waitFor:'elapsed'}]}];const p=store(e,m);repairWorkPackage(e.engine,e.operator,p.id,{accountMap:{a:first,mail:e.accountId}});const blocked=prepareWorkPackage(e.engine,e.operator,p.id);expect(blocked.preview.issues.some(i=>i.message.includes('canonical'))).toBe(true);expect(e.engine.db.prepare('SELECT COUNT(*) n FROM scheduled_actions').get()).toEqual({n:0});
+  m.contacts[0]!.linkedin='https://www.linkedin.com/in/peer/';repairWorkPackage(e.engine,e.operator,p.id,{manifest:m});const plan=prepareWorkPackage(e.engine,e.operator,p.id);expect(plan.preview.issues).toEqual([]);decideApproval(e.engine,e.approver,{approvalId:plan.authorizationId!,operationHash:plan.operationHash!,decision:'approved'});e.advance(1000);ingestConversation(e.engine,loadAccount(e.engine.db,first)!,{threadId:'native-peer-thread',peerUrl:'https://www.linkedin.com/in/peer/',messages:[{id:'native-incoming',text:'Thanks, I replied here.',inbound:true,at:e.now()}],updatedAt:e.now()});expect(e.engine.db.prepare('SELECT state FROM outreach_sequences').get()).toEqual({state:'stopped'});expect(e.engine.db.prepare('SELECT state FROM scheduled_actions').all()).toEqual([{state:'cancelled'},{state:'cancelled'}]);expect(e.fake.sendCalls).toBe(0);
+ });
+
  it('requires explicit account repair, then approves once and executes different accounts on days 20 and 31',async()=>{
   const {e,first,second}=await fixture();const now=e.now();const p=store(e,manifest(now));
   const missing=prepareWorkPackage(e.engine,e.operator,p.id);expect(missing.authorizationId).toBeNull();expect(missing.preview.issues.length).toBeGreaterThan(0);expect(e.social.publishCalls).toBe(0);

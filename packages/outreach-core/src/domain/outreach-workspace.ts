@@ -16,6 +16,16 @@ export function pauseOutreachSequence(env:DomainEnv,ctx:AuthContext,id:string){
  requireRole(ctx,'operator');const row=env.db.prepare('SELECT id FROM outreach_sequences WHERE workspace_id=? AND id=?').get(ctx.workspaceId,id);if(!row)throw new NotFoundError('sequence');
  env.db.prepare("UPDATE outreach_sequences SET state='paused',stop_reason='operator_paused',updated_at=? WHERE id=?").run(env.now(),id);audit(env.db,ctx,env.now(),'sequence',id,'paused',{});return {paused:true};
 }
+export function listInboxMonitoring(env:DomainEnv,ctx:AuthContext){
+ requireRole(ctx,'viewer');const maximumAge=15*60000;
+ return env.db.prepare('SELECT a.id,a.provider,a.health,a.capabilities,c.polled_at,c.error FROM provider_accounts a LEFT JOIN inbox_cursors c ON c.account_id=a.id WHERE a.workspace_id=? ORDER BY a.id').all<{id:string;provider:string;health:string;capabilities:string;polled_at:number|null;error:string|null}>(ctx.workspaceId).flatMap(a=>{
+  const capabilities=JSON.parse(a.capabilities) as {socialMessage?:boolean;socialChannels?:string[]};const adapter=env.adapters.get(a.provider);if(!adapter?.inbox?.listThreads&&!(capabilities.socialMessage&&adapter?.social?.conversations))return[];
+  const lastPolledAt=a.polled_at&&a.polled_at>0?a.polled_at:null;const ageMs=lastPolledAt===null?null:Math.max(0,env.now()-lastPolledAt);
+  const status=a.health!=='ok'?'connection_issue':a.error?'error':lastPolledAt===null?'never_polled':ageMs!>maximumAge?'stale':'fresh';const held=status!=='fresh';
+  const holdReason=status==='connection_issue'?'Reconnect and verify this account.':status==='error'?'Inbox synchronization must succeed before follow-ups continue.':status==='never_polled'?'Waiting for the first successful inbox sync.':status==='stale'?'The last inbox sync is older than 15 minutes.':null;
+  return[{accountId:a.id,provider:a.provider,channel:capabilities.socialChannels?.[0]??'email',health:a.health,status,lastPolledAt,ageMs,maxAgeMs:maximumAge,error:a.error,held,holdReason}];
+ });
+}
 export function listInboxThreads(env:DomainEnv,ctx:AuthContext,cursor='',limit=100){
  requireRole(ctx,'viewer');return env.db.prepare('SELECT t.*,p.capabilities FROM inbox_threads t JOIN provider_accounts p ON p.id=t.account_id WHERE t.workspace_id=? AND t.id>? ORDER BY t.id LIMIT ?').all<{id:string;subject:string;peer_url:string;account_id:string;contact_id:string|null;assigned_to:string|null;notes:string;updated_at:number;capabilities:string}>(ctx.workspaceId,cursor,Math.min(200,Math.max(1,limit))).map(t=>{
   const messages=env.db.prepare('SELECT id,native_id,text,inbound,at FROM inbox_messages WHERE thread_id=? ORDER BY at DESC,id DESC LIMIT 100').all<{id:string;native_id:string;text:string;inbound:number;at:number}>(t.id).reverse();
