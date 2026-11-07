@@ -39,5 +39,8 @@
   },
   "bugs": {
     "url": "https://github.com/splitintech/outreach-engine/issues"
+  },
+  "dependencies": {
+    "zod": "^4.6.6"
   }
 }
