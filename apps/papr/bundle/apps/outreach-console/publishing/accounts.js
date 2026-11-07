@@ -23,7 +23,7 @@ export function connectPlatform(channel, data, refresh) {
     if (!result.accountId) throw new Error('The connection could not be confirmed. Refresh Accounts before trying again.');
     notice.textContent = 'Connection created. Open the private browser, sign in, then check your identity.';
     const check = button('Check session after login', () => busy(check, async () => { const status = await api('account-check', { accountId: result.accountId }); notice.textContent = status.status === 'ok' ? 'Your account identity is verified. You can now prepare posts for approval.' : `${status.status}: ${status.detail || 'Finish sign-in in the private browser, then check again.'}`; await refresh(); }), 'primary');
-    form.replaceChildren(el('h3', { text: 'Your browser connection is ready' }), loginLink(data.liveViewUrl) || el('p', { class: 'field-help', text: 'The private login link is not configured. Ask the runtime administrator to refresh it, then return to Accounts.' }), notice, check); await refresh();
+    form.replaceChildren(el('h3', { text: 'Your browser connection is ready' }), (data.roles?.includes('admin')?loginLink(data.liveViewUrl):null) || el('p', { class: 'field-help', text: 'The private login link is not configured. Ask the runtime administrator to refresh it, then return to Accounts.' }), notice, check); await refresh();
   }); });
   m.content.append(form); m.bottom.append(el('small', { text: 'Nothing is posted during account connection.' }), button('Finish later', m.close)); identity.focus();
 }
@@ -34,10 +34,10 @@ export function renderAccounts(data, refresh) {
     const accounts = accountsFor(data, p.id); const card = el('article', { class: 'account-card' }, el('div', { class: 'account-title' }, el('span', { class: `platform-icon ${p.id}`, text: p.icon }), el('h3', { text: p.name })), el('p', { text: p.hint }));
     if (!accounts.length) card.append(badge('Not connected'), el('p', { text: 'Draft now, connect later. A verified browser identity is required before publishing.' }));
     for (const account of accounts) {
-      const health = account.health || 'unknown'; const canOperate = data.roles?.some((role) => ['admin', 'operator'].includes(role)); const check = button('Check connection', () => busy(check, async () => { const result = await api('account-check', { accountId: account.id }); notify(result.status === 'ok' ? `${p.name} account verified.` : `${p.name}: ${result.detail || result.status}`); await refresh(); }), 'small');
+      const health = account.health || 'unknown'; const canOperate = data.roles?.some((role) => ['admin', 'operator', 'approver'].includes(role)); const check = button('Check connection', () => busy(check, async () => { const result = await api('account-check', { accountId: account.id }); notify(result.status === 'ok' ? `${p.name} account verified.` : `${p.name}: ${result.detail || result.status}`); await refresh(); }), 'small');
       const reconnect = button('Reconnect', () => busy(reconnect, async () => { await api('account-reconnect', { accountId: account.id }); notify('Reconnect requested. Open private browser login, finish sign-in and check again.'); await refresh(); }), 'small');
       check.disabled = !canOperate; reconnect.disabled = !canOperate;
-      card.append(el('strong', { style: 'font-size:12px', text: accountName(account) }), el('p', { text: account.externalAccountId }), badge(health === 'ok' ? 'Connected' : health), el('div', { class: 'toolbar-group' }, check, reconnect), loginLink(data.liveViewUrl));
+      card.append(el('strong', { style: 'font-size:12px', text: accountName(account) }), el('p', { text: account.externalAccountId }), badge(health === 'ok' ? 'Connected' : health), el('div', { class: 'toolbar-group' }, check, reconnect)); const login=data.roles?.includes('admin')?loginLink(data.liveViewUrl):null;if(login)card.append(login);
     }
     const add = button(accounts.length ? 'Add another account' : `Connect ${p.name}`, () => connectPlatform(p.id, data, refresh), 'small'); add.disabled = !data.roles?.includes('admin'); card.append(add); cards.append(card);
   }

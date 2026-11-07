@@ -14,7 +14,7 @@ function outcome(value,title) {
   if(!value.attempts?.length)result.append(el('p',{class:'field-help',text:'No execution attempt or native receipt recorded.'}));
   for(const attempt of value.attempts||[]) {
     const receipt=attempt.receipt;const row=el('div',{},el('strong',{text:`Attempt ${attempt.attempt_no} · ${attempt.outcome}`}),el('small',{class:'field-help',text:attempt.finished_at?dateText(attempt.finished_at):'Attempt has no recorded completion'}));
-    if(receipt?.providerMessageId)row.append(el('p',{text:`Native identifier: ${receipt.providerMessageId}`}),receipt.acceptedAt?el('small',{text:`Provider acceptance: ${dateText(receipt.acceptedAt)}`}):null,nativeLink(receipt.raw?.url||receipt.providerMessageId));
+    if(receipt?.providerMessageId){row.append(el('p',{text:`Native identifier: ${receipt.providerMessageId}`}));if(receipt.acceptedAt)row.append(el('small',{text:`Provider acceptance: ${dateText(receipt.acceptedAt)}`}));const link=nativeLink(receipt.raw?.url||receipt.providerMessageId);if(link)row.append(link);}
     else row.append(el('p',{class:'field-help',text:'No confirmed native receipt for this attempt.'}));
     if(attempt.error_class)row.append(el('p',{class:'field-help',text:`Provider result: ${attempt.error_class}`}));result.append(row);
   }

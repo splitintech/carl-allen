@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "accent": "#ee7828",
+  "recordedAt": "2026-11-07",
+  "verification": "automated-checks-required-before-merge",
+  "tabs": [
+    {
+      "id": "home",
+      "name": "Home",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/home.js",
+      "backend": [
+        "GET /v1/home"
+      ],
+      "behavior": "Pending reviews across publishing/outreach/replies, upcoming work, real outcomes and connection issues",
+      "implemented": true
+    },
+    {
+      "id": "create",
+      "name": "Create",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/work-packages.js",
+      "backend": [
+        "GET/POST/PATCH /v1/work-packages",
+        "POST /v1/work-packages/:id/prepare",
+        "GET/POST/DELETE /v1/publishing/drafts",
+        "POST/GET/DELETE /v1/publishing/uploads"
+      ],
+      "behavior": "HTML import/repair/revisions/account-media mapping, templates/instructions, drafts and media",
+      "implemented": true
+    },
+    {
+      "id": "publish",
+      "name": "Publish",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/calendar.js",
+      "backend": [
+        "GET /v1/publishing/actions",
+        "GET /v1/actions/:id",
+        "POST /v1/publishing/plans/:id/prepare",
+        "POST /v1/plan-authorizations/:id/approve",
+        "POST /v1/approvals/:id/decide"
+      ],
+      "behavior": "Month/week/list, filters, exact review, receipts and imported HTML review links",
+      "implemented": true
+    },
+    {
+      "id": "people",
+      "name": "People",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/panels.js",
+      "backend": [
+        "GET /v1/people"
+      ],
+      "behavior": "Retained contact sources, channels, notes, consent basis, restrictions, deduplication and detail view",
+      "implemented": true
+    },
+    {
+      "id": "outreach",
+      "name": "Outreach",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/outreach.js",
+      "backend": [
+        "GET /v1/outreach/sequences",
+        "GET /v1/outreach/sequences/:id",
+        "POST /v1/outreach/sequences/:id/pause",
+        "POST /v1/outreach/sequences/:id/resume"
+      ],
+      "behavior": "Exact rendered steps, contact/account identity, progress, native receipts and guarded pause/resume",
+      "implemented": true
+    },
+    {
+      "id": "inbox",
+      "name": "Inbox",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/mailbox.js",
+      "backend": [
+        "GET/PATCH /v1/inbox/threads",
+        "GET /v1/inbox/monitoring",
+        "GET/POST/DELETE /v1/accounts/:id/drafts",
+        "GET/POST /v1/reply-playbooks"
+      ],
+      "behavior": "Conversation direction/time, assignments/notes, monitoring holds, mailbox drafts and separate reply-rule approval",
+      "implemented": true
+    },
+    {
+      "id": "insights",
+      "name": "Insights",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/insights.js",
+      "backend": [
+        "GET /v1/insights",
+        "GET /v1/settings/media",
+        "GET /v1/inbox/monitoring"
+      ],
+      "behavior": "Recorded action/outreach metrics, verified storage/reservations/quota and account-specific monitoring health",
+      "implemented": true
+    },
+    {
+      "id": "settings",
+      "name": "Settings",
+      "screen": "apps/papr/bundle/apps/outreach-console/publishing/team.js",
+      "backend": [
+        "GET/POST /v1/accounts",
+        "POST /v1/accounts/:id/check",
+        "GET/PATCH /v1/settings/media",
+        "GET/PATCH /v1/settings/policy",
+        "GET /v1/team",
+        "POST/DELETE /v1/team/invitations",
+        "PATCH /v1/team/members/:id"
+      ],
+      "behavior": "Social/mailbox connection management, OAuth setup guidance, server-owned roles, access removal, invitation revocation, storage and policy",
+      "implemented": true
+    }
+  ],
+  "guards": [
+    "workspace-scoped server identity",
+    "role-checked mutations",
+    "self/last-admin protection",
+    "replies/opt-outs/uncertain outcomes cannot resume",
+    "fresh original approval remains required",
+    "provider drafts do not send mail",
+    "API errors cannot masquerade as empty data",
+    "unfinished inline forms survive refresh; successful saves clear retained values"
+  ],
+  "testEvidence": [
+    "packages/outreach-server/src/workspace-dashboard.test.ts",
+    "packages/outreach-server/src/workspace-management.test.ts",
+    "apps/papr/src/sidebar-integration.test.ts",
+    "apps/papr/src/workspace-management-ui.test.ts"
+  ],
+  "externalAcceptance": [
+    "User-owned Cloudflare/Google deployment",
+    "Social profile login and mailbox OAuth grants",
+    "Native live-provider receipts and Mac-off operational soak"
+  ],
+  "mailboxOnboarding": "Configured grants are registered through trusted administrator OAuth/CLI setup; UI checks connected mailboxes and manages inboxes/drafts. No passwords or grant files are entered in handoffs."
+}

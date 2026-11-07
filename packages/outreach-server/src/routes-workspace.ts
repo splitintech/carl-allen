@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { extractWorkPackage, workPackageTemplate } from '@splitin/outreach-import';
-import { getWorkspaceExecutionLimits,setWorkspaceExecutionLimits,workspaceMediaQuota,putImmutableDocument,configuredMediaStore,storeWorkPackage,getWorkPackage,listWorkPackages,repairWorkPackage,prepareWorkPackage,decideApproval,listPeople,listOutreachSequences,pauseOutreachSequence,listInboxThreads,listInboxMonitoring,updateInboxThread,workspaceInsights,listTeam,inviteTeamMember,requireRole,ConflictError, type Engine } from '@splitin/outreach-core';
+import { getWorkspaceExecutionLimits,setWorkspaceExecutionLimits,workspaceStorage,workspaceHome,putImmutableDocument,configuredMediaStore,storeWorkPackage,getWorkPackage,listWorkPackages,repairWorkPackage,prepareWorkPackage,decideApproval,listPeople,listOutreachSequences,pauseOutreachSequence,listInboxThreads,listInboxMonitoring,updateInboxThread,workspaceInsights,listTeam,inviteTeamMember,requireRole,ConflictError, type Engine } from '@splitin/outreach-core';
 import type { Hono } from 'hono';
 import { auth, type ServerEnv } from './app';
 const page=z.object({cursor:z.string().max(200).optional(),limit:z.coerce.number().int().min(1).max(200).default(100)}).passthrough();
 const repair=z.object({manifest:z.unknown().optional(),accountMap:z.record(z.string(),z.string()).optional(),mediaMap:z.record(z.string(),z.string()).optional()}).strict();
 export function registerWorkspaceRoutes(app:Hono<ServerEnv>,engine:Engine):void {
+ app.get('/v1/home',(c)=>c.json({home:workspaceHome(engine,auth(c))}));
  app.get('/v1/work-packages/template',(c)=>{requireRole(auth(c),'viewer');return c.json({html:workPackageTemplate()});});
  app.post('/v1/work-packages',async(c)=>{
   const input=z.object({name:z.string().min(1).max(200),html:z.string().min(1).max(20*1024*1024)}).strict().parse(await c.req.json());
@@ -34,8 +35,8 @@ export function registerWorkspaceRoutes(app:Hono<ServerEnv>,engine:Engine):void 
  app.patch('/v1/inbox/threads/:id',async(c)=>c.json(updateInboxThread(engine,auth(c),c.req.param('id'),z.object({assignedTo:z.string().nullable().optional(),notes:z.string().max(10000).optional()}).strict().parse(await c.req.json()))));
  app.get('/v1/settings/policy',(c)=>c.json({policy:getWorkspaceExecutionLimits(engine,auth(c))}));
  app.patch('/v1/settings/policy',async(c)=>c.json({policy:setWorkspaceExecutionLimits(engine,auth(c),await c.req.json())}));
- app.get('/v1/settings/media',(c)=>{requireRole(auth(c),'viewer');const storage=workspaceMediaQuota(engine,auth(c));return c.json({...storage,storage});});
- app.patch('/v1/settings/media',async(c)=>{const ctx=auth(c);requireRole(ctx,'admin');const v=z.object({quotaBytes:z.number().int().min(5*1024*1024).max(1024*1024*1024*1024)}).strict().parse(await c.req.json());const row=engine.db.prepare('SELECT settings FROM workspaces WHERE id=?').get<{settings:string}>(ctx.workspaceId)!;engine.db.prepare('UPDATE workspaces SET settings=? WHERE id=?').run(JSON.stringify({...JSON.parse(row.settings),mediaQuotaBytes:v.quotaBytes}),ctx.workspaceId);return c.json(workspaceMediaQuota(engine,ctx));});
+ app.get('/v1/settings/media',(c)=>{requireRole(auth(c),'viewer');const storage=workspaceStorage(engine,auth(c));return c.json({...storage,storage});});
+ app.patch('/v1/settings/media',async(c)=>{const ctx=auth(c);requireRole(ctx,'admin');const v=z.object({quotaBytes:z.number().int().min(5*1024*1024).max(1024*1024*1024*1024)}).strict().parse(await c.req.json());const row=engine.db.prepare('SELECT settings FROM workspaces WHERE id=?').get<{settings:string}>(ctx.workspaceId)!;engine.db.prepare('UPDATE workspaces SET settings=? WHERE id=?').run(JSON.stringify({...JSON.parse(row.settings),mediaQuotaBytes:v.quotaBytes}),ctx.workspaceId);return c.json(workspaceStorage(engine,ctx));});
  app.get('/v1/insights',(c)=>c.json({metrics:workspaceInsights(engine,auth(c))}));
  app.get('/v1/team',(c)=>c.json(listTeam(engine,auth(c))));
  app.post('/v1/team/invitations',async(c)=>{const v=z.object({email:z.string().email(),roles:z.array(z.enum(['viewer','operator','approver','admin'])).min(1).max(4)}).strict().parse(await c.req.json());return c.json({invitation:inviteTeamMember(engine,auth(c),v.email,v.roles)},201);});

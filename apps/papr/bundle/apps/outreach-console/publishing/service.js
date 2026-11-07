@@ -7,6 +7,11 @@ const id = (value) => { if (typeof value !== 'string' || (value.length < 1 || va
 const pageQuery = (p) => { const q = new URLSearchParams(); for (const key of ['from', 'to', 'cursor', 'limit', 'accountId', 'channel']) if (p[key] !== undefined && p[key] !== '') q.set(key, String(p[key])); return q.size ? `?${q}` : ''; };
 export function restAction(action, p = {}) {
   const map = {
+    'home-overview':()=>['GET','/v1/home'],
+    'outreach-review':()=>['GET',`/v1/outreach/sequences/${id(p.sequenceId)}`],
+    'outreach-resume':()=>['POST',`/v1/outreach/sequences/${id(p.sequenceId)}/resume`,{}],
+    'team-member-save':()=>['PATCH',`/v1/team/members/${id(p.principalId)}`,{roles:p.roles,reason:p.reason}],
+    'team-invite-revoke':()=>['DELETE',`/v1/team/invitations/${id(p.invitationId)}`,{reason:p.reason}],
     'reply-playbooks':()=>['GET','/v1/reply-playbooks'+pageQuery(p)],
     'reply-playbook-review':()=>['GET',`/v1/reply-playbooks/${id(p.playbookId)}`],
     'reply-playbook-decide':()=>['POST',`/v1/reply-playbooks/${id(p.playbookId)}/decide`,{decision:p.decision,operationHash:p.operationHash,reason:p.reason}],

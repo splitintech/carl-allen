@@ -756,6 +756,66 @@
         "OUTREACH_CONNECTION_FILE"
       ],
       "timeoutMs": 120000
+    },
+    "home-overview": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "outreach-review": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "outreach-resume": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "team-member-save": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "team-invite-revoke": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
     }
   }
 }
