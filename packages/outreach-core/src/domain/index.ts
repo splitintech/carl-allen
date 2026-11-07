@@ -36,3 +36,6 @@ export * from './publishing-durable';
 
 export * from './workspace-policy';
 export * from './reply-playbooks';
+export * from './workspace-management';
+
+export * from './workspace-dashboard';

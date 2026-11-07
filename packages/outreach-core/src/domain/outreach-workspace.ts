@@ -1,20 +1,22 @@
+import {isSuppressed} from './suppressions';
 import { ulid } from '@splitin/outreach-contracts';
 import { audit, ConflictError, NotFoundError, requireRole, type AuthContext, type Role } from './auth';
 import type { DomainEnv } from './env';
+import { listManagedOutreachSequences, guardedPauseOutreachSequence } from './workspace-management';
 export function listPeople(env:DomainEnv,ctx:AuthContext,cursor='',limit=100){
  requireRole(ctx,'viewer');
- return env.db.prepare('SELECT id,full_name,attributes FROM contacts WHERE workspace_id=? AND id>? ORDER BY id LIMIT ?').all<{id:string;full_name:string;attributes:string}>(ctx.workspaceId,cursor,Math.min(200,Math.max(1,limit))).map(c=>{
+ return env.db.prepare('SELECT id,full_name,attributes FROM contacts WHERE workspace_id=? AND merged_into_id IS NULL AND id>? ORDER BY id LIMIT ?').all<{id:string;full_name:string;attributes:string}>(ctx.workspaceId,cursor,Math.min(200,Math.max(1,limit))).map(c=>{
   const attrs=JSON.parse(c.attributes) as {sources?:string[];notes?:string};
-  const points=env.db.prepare('SELECT kind,value_raw,permitted_channels FROM contact_points WHERE workspace_id=? AND contact_id=?').all<{kind:string;value_raw:string;permitted_channels:string}>(ctx.workspaceId,c.id);
-  return {id:c.id,name:c.full_name,sources:attrs.sources??[],notes:attrs.notes??'',...Object.fromEntries(points.map(p=>[p.kind==='email'?'email':(JSON.parse(p.permitted_channels) as string[])[0]??'profile',p.value_raw]))};
+  const points=env.db.prepare('SELECT kind,value_norm,value_raw,consent_basis,jurisdiction,source,permitted_channels FROM contact_points WHERE workspace_id=? AND contact_id=?').all<{kind:string;value_norm:string;value_raw:string;consent_basis:string|null;jurisdiction:string|null;source:string;permitted_channels:string}>(ctx.workspaceId,c.id);
+  const details=points.map(p=>({kind:p.kind,value:p.value_raw,channels:JSON.parse(p.permitted_channels) as string[],consentBasis:p.consent_basis??'unknown',jurisdiction:p.jurisdiction,source:p.source}));const restricted=points.some(p=>((JSON.parse(p.permitted_channels) as string[]).length?JSON.parse(p.permitted_channels) as string[]:['*']).some(channel=>isSuppressed(env.db,ctx.workspaceId,p.value_norm,null,channel)));
+  return {id:c.id,name:c.full_name,points:details,status:restricted?'Contact restriction':details.length&&details.every(p=>p.consentBasis!=='unknown')?'Reviewed basis recorded':'Needs consent review',sources:attrs.sources??[],notes:attrs.notes??'',...Object.fromEntries(points.map(p=>[p.kind==='email'?'email':(JSON.parse(p.permitted_channels) as string[])[0]??'profile',p.value_raw]))};
  });
 }
 export function listOutreachSequences(env:DomainEnv,ctx:AuthContext,cursor='',limit=100){
- requireRole(ctx,'viewer');return env.db.prepare('SELECT * FROM outreach_sequences WHERE workspace_id=? AND id>? ORDER BY id LIMIT ?').all<{id:string;name:string;state:string;contact_id:string;action_ids:string;steps:string;stop_reason:string|null;updated_at:number}>(ctx.workspaceId,cursor,Math.min(200,Math.max(1,limit))).map(s=>({id:s.id,name:s.name,status:s.state,contactId:s.contact_id,actionIds:JSON.parse(s.action_ids) as string[],steps:JSON.parse(s.steps) as unknown,stopReason:s.stop_reason,updatedAt:s.updated_at}));
+ return listManagedOutreachSequences(env,ctx,cursor,limit);
 }
 export function pauseOutreachSequence(env:DomainEnv,ctx:AuthContext,id:string){
- requireRole(ctx,'operator');const row=env.db.prepare('SELECT id FROM outreach_sequences WHERE workspace_id=? AND id=?').get(ctx.workspaceId,id);if(!row)throw new NotFoundError('sequence');
- env.db.prepare("UPDATE outreach_sequences SET state='paused',stop_reason='operator_paused',updated_at=? WHERE id=?").run(env.now(),id);audit(env.db,ctx,env.now(),'sequence',id,'paused',{});return {paused:true};
+ return guardedPauseOutreachSequence(env,ctx,id);
 }
 export function listInboxMonitoring(env:DomainEnv,ctx:AuthContext){
  requireRole(ctx,'viewer');const maximumAge=15*60000;
@@ -49,7 +51,7 @@ export function workspaceInsights(env:DomainEnv,ctx:AuthContext){
  return metrics;
 }
 export function listTeam(env:DomainEnv,ctx:AuthContext){
- requireRole(ctx,'viewer');return {members:env.db.prepare('SELECT id,display_name,roles FROM principals WHERE workspace_id=?').all<{id:string;display_name:string;roles:string}>(ctx.workspaceId).map(r=>({id:r.id,name:r.display_name,roles:JSON.parse(r.roles) as string[]})),invitations:ctx.roles.includes('admin')?env.db.prepare('SELECT id,email,roles,expires_at,accepted_at FROM cloud_invitations WHERE workspace_id=? ORDER BY created_at DESC').all<{id:string;email:string;roles:string;expires_at:number;accepted_at:number|null}>(ctx.workspaceId).map(r=>({...r,roles:JSON.parse(r.roles) as string[],status:r.accepted_at?'Accepted':r.expires_at<env.now()?'Expired':'Pending'})):[]};
+ requireRole(ctx,'viewer');return {currentPrincipalId:ctx.principalId,members:env.db.prepare('SELECT id,display_name,roles FROM principals WHERE workspace_id=?').all<{id:string;display_name:string;roles:string}>(ctx.workspaceId).map(r=>({id:r.id,name:r.display_name,roles:JSON.parse(r.roles) as string[]})),invitations:ctx.roles.includes('admin')?env.db.prepare('SELECT id,email,roles,expires_at,accepted_at FROM cloud_invitations WHERE workspace_id=? ORDER BY created_at DESC').all<{id:string;email:string;roles:string;expires_at:number;accepted_at:number|null}>(ctx.workspaceId).map(r=>({...r,roles:JSON.parse(r.roles) as string[],status:r.accepted_at?'Accepted':r.expires_at<env.now()?'Expired':'Pending'})):[]};
 }
 export function inviteTeamMember(env:DomainEnv,ctx:AuthContext,email:string,roles:Role[]){
  requireRole(ctx,'admin');if(!email.includes('@')||!roles.length)throw new ConflictError('Email and roles are required');

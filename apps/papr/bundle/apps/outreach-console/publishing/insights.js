@@ -1,0 +1,16 @@
+import { el, badge, dateText } from './utils.js';
+import { accountName } from './model.js';
+const size=value=>new Intl.NumberFormat(undefined,{maximumFractionDigits:2}).format(Number(value)/1073741824)+' GB';
+export function storageSummary(storage) {
+ if(!storage||typeof storage.quotaBytes!=='number')return el('p',{class:'field-help',text:'Storage usage could not be loaded. Refresh before changing its quota.'});
+ const used=storage.usedBytes??0,reserved=storage.reservedBytes??0;const progress=el('progress',{class:'progress-meter',max:storage.quotaBytes,value:Math.min(storage.quotaBytes,used+reserved),'aria-label':'Used and reserved workspace storage'});
+ return el('div',{class:'stack'},el('p',{text:`${size(used)} used · ${size(reserved)} reserved · ${size(storage.quotaBytes)} quota`}),progress,el('p',{class:'field-help',text:`${Number(storage.files??0).toLocaleString()} verified files · ${Number(storage.activeUploads??0).toLocaleString()} active uploads · ${storage.storageMode==='r2'?'Private R2 storage':'Local sandbox storage'}`}));
+}
+export function renderInsights(data) {
+ const metrics=data.metrics||{};const root=el('div',{class:'stack'},el('div',{class:'info-card'},el('h2',{text:'Delivery & operational usage'}),el('p',{text:'These counts are recorded engine outcomes. Reach, impressions and follower analytics require native platform analytics and are outside this workspace.'})));
+ const labels={people:'Sourced people',replies:'Incoming replies',unhealthyAccounts:'Accounts needing attention',succeeded:'Completed actions',failed:'Failed actions',uncertain:'Uncertain outcomes',review:'Held for review',scheduled:'Scheduled actions',awaiting_approval:'Awaiting approval',cancelled:'Cancelled actions',claimed:'Preparing actions',executing:'Executing actions',reconciling:'Reconciling outcomes',retryable:'Deferred actions',planned:'Planned actions'};
+ const values=Object.entries(metrics).filter(([key,value])=>key!=='mediaBytes'&&typeof value==='number');root.append(el('div',{class:'metric-grid'},...values.map(([key,value])=>el('div',{class:'summary-box',text:labels[key]||key.replaceAll('_',' ')},el('strong',{text:value.toLocaleString()})))));
+ const storage=el('section',{class:'info-card'},el('h2',{text:'Private media & storage'}));if(data.errors?.['storage-settings'])storage.append(el('p',{class:'banner error',role:'status',text:data.errors['storage-settings']}));else storage.append(storageSummary(data.storage));root.append(storage);
+ const monitoring=el('section',{class:'info-card'},el('h2',{text:'Inbox monitoring health'}));if(data.errors?.['inbox-monitoring'])monitoring.append(el('p',{class:'banner error',role:'status',text:data.errors['inbox-monitoring']}));else if(!data.inboxMonitoring?.length)monitoring.append(el('p',{text:'No connected accounts have inbox monitoring yet. Connect accounts before relying on follow-up automation.'}));else for(const row of data.inboxMonitoring)monitoring.append(el('div',{class:'dashboard-row'},el('div',{},el('strong',{text:accountName(data.accounts.find(a=>a.id===row.accountId))}),el('small',{text:row.lastPolledAt?'Last checked '+dateText(row.lastPolledAt):'No successful inbox sync yet'}),row.holdReason?el('p',{text:row.holdReason}):null),badge(row.status)));
+ root.append(monitoring);return root;
+}

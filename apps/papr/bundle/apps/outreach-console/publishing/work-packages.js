@@ -5,7 +5,7 @@ import { api, upload } from './service.js';
 import { accountName, platform } from './model.js';
 import { rejectExactPlan } from './review.js';
 import { icon } from './icons.js';
-const canEdit = (data) => data.roles?.some((role) => ['admin', 'operator'].includes(role));
+const canEdit = (data) => data.roles?.some((role) => ['admin', 'operator', 'approver'].includes(role));
 const canApprove = (data) => data.roles?.some((role) => ['admin', 'approver'].includes(role));
 const issueText = (issue) => typeof issue === 'string' ? issue : `${issue.field || issue.path || 'Plan'}: ${issue.message || issue.reason || 'Needs review'}`;
 function download(name, text) { const url = URL.createObjectURL(new Blob([text], { type: 'text/html;charset=utf-8' })); const link = el('a', { href: url, download: name }); link.click(); URL.revokeObjectURL(url); }
