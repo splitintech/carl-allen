@@ -760,5 +760,6 @@
     "stories/polls/music/collaborators",
     "native engagement analytics"
   ],
-  "evidenceRules": "Source tests, Git delivery, deployment, real native receipts and human acceptance are separate. Synthetic month/capacity tests are not a production soak."
+  "evidenceRules": "Source tests, Git delivery, deployment, real native receipts and human acceptance are separate. Synthetic month/capacity tests are not a production soak.",
+  "remediationLedger": "docs/plans/carl-allen-social-zoho-requirements.json"
 }

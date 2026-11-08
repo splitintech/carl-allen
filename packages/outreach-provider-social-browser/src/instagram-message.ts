@@ -5,6 +5,7 @@ import type { AccountBinding } from './runtime';
 import { canonicalSocialProfile } from './platforms';
 import { networkReady, type NetworkOptions } from './network-publish';
 import { preEffectFailure } from './linkedin';
+import { verifyNativeThread } from './conversation-thread';
 
 function nativeId(body:unknown):string|undefined{
   if(!body||typeof body!=='object')return;
@@ -18,11 +19,12 @@ export async function instagramMessage(session:SocialSession,ctx:ProviderContext
   let crossed=false;let authenticated=false;let pageUrl:string|undefined;
   try{return await session.withPage(ctx.signal,async page=>{
     await networkReady(page,binding,'instagram',options);authenticated=true;
-    await page.goto(`${options.origin}${new URL(target.url).pathname}`,{waitUntil:'domcontentloaded'});pageUrl=page.url();
+    await page.goto(`${options.origin}${input.threadId?'/direct/t/'+encodeURIComponent(input.threadId)+'/':new URL(target.url).pathname}`,{waitUntil:'domcontentloaded'});pageUrl=page.url();
     if(new URL(page.url()).origin!==options.origin)throw new Error('Profile left bound Instagram origin');
-    await page.getByRole('button',{name:/^Message$/i}).or(page.getByRole('link',{name:/^Message$/i})).first().click();
+    if(!input.threadId)await page.getByRole('button',{name:/^Message$/i}).or(page.getByRole('link',{name:/^Message$/i})).first().click();
     const recipient=await page.locator(binding.messageRecipientSelector??'header a[href], [data-conversation-peer]').first().getAttribute('href',{timeout:options.confirmationTimeoutMs??15000});
     if(!recipient||canonicalSocialProfile(new URL(recipient,'https://www.instagram.com').href).url!==target.url)throw new Error('Opened conversation recipient does not match approved Instagram target');
+    if(input.threadId)await verifyNativeThread(page,input.threadId,{selector:binding.messageRecipientSelector??'header a[href], [data-conversation-peer]',peerUrl:target.url,ownerUrl:canonicalSocialProfile(binding.loginProfileUrl??binding.expectedProfileUrl??'').url});
     const selector='[data-message-id], [data-item-id]';const before=await page.locator(selector).evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-message-id')??n.getAttribute('data-item-id')));
     await page.getByRole('textbox').last().fill(input.text);
     const receipt:Promise<Response|null>=page.waitForResponse(r=>r.request().method()==='POST'&&/direct_v2\/threads\/[^/]+\/items\//.test(r.url())&&r.request().postData()?.includes(input.text)===true,{timeout:options.confirmationTimeoutMs??15000}).catch(()=>null);

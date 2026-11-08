@@ -11,3 +11,4 @@ export * from './mime';
 export * from './work-package';
 
 export * from './publishing';
+export * from './media-probe';

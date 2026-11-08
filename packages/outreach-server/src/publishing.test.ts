@@ -1,3 +1,4 @@
+import {execFileSync} from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, appendFileSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,7 +9,7 @@ import { FakeSocialProvider, FAKE_SOCIAL_SECRET, staticSecrets } from '@splitin/
 import { openSqliteDatabase } from '@splitin/outreach-store-sqlite';
 import { createApp } from './app';
 const png = Buffer.from([137,80,78,71,13,10,26,10,1,2,3,4]);
-const mp4 = Buffer.from([0,0,0,16,102,116,121,112,105,115,111,109,0,0,0,0]);
+const mp4 = execFileSync(process.env.OUTREACH_FFMPEG_PATH??'ffmpeg',['-v','error','-f','lavfi','-i','color=c=black:s=720x1280:r=25:d=3','-c:v','libx264','-pix_fmt','yuv420p','-threads','1','-an','-movflags','frag_keyframe+empty_moov','-f','mp4','pipe:1'],{timeout:30000});
 describe('publishing workspace and protected uploads', () => {
   let f: Awaited<ReturnType<typeof fixture>>;
   async function fixture() {
@@ -96,6 +97,7 @@ describe('publishing workspace and protected uploads', () => {
     expect(replay.actions.map((a) => a.id)).toEqual(submitted.actions.map((a) => a.id));
     expect((await f.request(`/v1/publishing/media/${image.id}`, 'DELETE')).status).toBe(409);
   });
+  it('returns actionable media inspection failures in authenticated action details without changing approved content',async()=>{const accountId=await f.account();const saved=await(await f.request('/v1/publishing/drafts','POST',f.draft([{channel:'linkedin',accountId,text:'Recorded failure',mediaIds:[]}]))).json() as {draft:{id:string}};const submitted=await(await f.request(`/v1/publishing/drafts/${saved.draft.id}/submit`,'POST')).json() as {actions:{id:string}[]};const id=submitted.actions[0]!.id;const detail='Re-export video as MP4 / H.264 with 8-bit yuv420p pixels.';f.db.prepare("UPDATE scheduled_actions SET state='failed',attempt_count=1 WHERE id=?").run(id);f.db.prepare('INSERT INTO action_attempts(id,action_id,attempt_no,outcome,error_class,error_detail,started_at,finished_at) VALUES(?,?,?,?,?,?,?,?)').run('media-error-attempt',id,1,'rejected_permanent','unsupported',detail,Date.now(),Date.now());const response=await f.request('/v1/actions/'+id);expect(response.status).toBe(200);expect(await response.json()).toMatchObject({attempts:[{error_class:'unsupported',error_detail:detail}]});expect((await f.request('/v1/actions/'+id,'GET',undefined,'other')).status).toBe(404);expect(f.fake.publishCalls).toBe(0);});
   it('preserves blocked drafts and never manufactures schedules for disconnected or unsupported channels', async () => {
     const saved = await (await f.request('/v1/publishing/drafts', 'POST', f.draft([{ channel: 'tiktok', text: 'Not yet', mediaIds: [] }]))).json() as { draft: { id: string } };
     const blocked = await (await f.request(`/v1/publishing/drafts/${saved.draft.id}/submit`, 'POST')).json() as { draft: { status: string }; actions: unknown[]; blocked: { reason: string }[] };

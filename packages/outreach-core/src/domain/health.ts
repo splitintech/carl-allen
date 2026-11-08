@@ -1,3 +1,4 @@
+import {accountLifecycle} from './account-lifecycle';
 import { appendAudit, ulid, type AccountHealth, type SqlDatabase } from '@splitin/outreach-contracts';
 import { loadAccount } from '../execution/actions-repo';
 import { enqueueAction } from '../execution/enqueue';
@@ -87,6 +88,8 @@ export function recordAccountHealth(db: SqlDatabase, accountId: string, observed
 export async function checkAccountHealth(env: DomainEnv, accountId: string): Promise<HealthResult> {
   const account = loadAccount(env.db, accountId);
   if (!account) throw new NotFoundError(`provider account ${accountId}`);
+  const lifecycle=accountLifecycle(env,account.workspace_id,account.id);
+  if(lifecycle)return {accountId,status:account.health,detail:'account_'+lifecycle.status,changed:false};
   const adapter = env.adapters.get(account.provider);
   if (!adapter) throw new NotFoundError(`adapter ${account.provider} (not registered in this process)`);
   let observed: HealthObservation;
@@ -111,6 +114,8 @@ export async function checkDueAccountHealth(env: DomainEnv, intervalMs: number):
   let changed = 0;
   for (const account of due) {
     if (!env.adapters.has(account.provider)) continue;
+    const owner=env.db.prepare('SELECT workspace_id FROM provider_accounts WHERE id=?').get<{workspace_id:string}>(account.id);
+    if(owner&&accountLifecycle(env,owner.workspace_id,account.id))continue;
     const result = await checkAccountHealth(env, account.id);
     checked += 1;
     if (result.changed) changed += 1;

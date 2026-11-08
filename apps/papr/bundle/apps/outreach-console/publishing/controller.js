@@ -6,6 +6,7 @@ import { sendingControl } from './kill.js';
 import { $, el, button, notify } from './utils.js';
 import { platform, accountName } from './model.js';
 import { api } from './service.js';
+import {resumeMailboxConnection} from './mailbox-connect.js';
 import { openComposer } from './composer.js';
 import { renderCalendar } from './calendar.js';
 import { renderDrafts, renderQueue } from './queue.js';
@@ -83,4 +84,4 @@ mountIcons(); $('stop-studio').addEventListener('click', () => sendingControl(re
 $('new-post').addEventListener('click', () => create()); $('sidebar-new').addEventListener('click', newWork); $('refresh-studio').addEventListener('click', () => { void refresh(); });
 document.querySelectorAll('[data-view]').forEach((control) => control.addEventListener('click', () => change(control.dataset.view)));
 if (location.protocol === 'file:') { notify('Offline interface preview. Open Carl-Allen through the trusted server or Papr to use the private workspace.'); }
-void refresh(); const timer = setInterval(() => { if (!document.querySelector('dialog[open]')&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]')) void refresh(); }, 30000); globalThis.addEventListener('pagehide', () => clearInterval(timer));
+void refresh().then(()=>resumeMailboxConnection(data,refresh)); const timer = setInterval(() => { if (!document.querySelector('dialog[open]')&&!document.activeElement?.matches('input,textarea,select,[contenteditable=true]')) void refresh(); }, 30000); globalThis.addEventListener('pagehide', () => clearInterval(timer));

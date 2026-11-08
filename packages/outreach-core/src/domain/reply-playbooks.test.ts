@@ -6,6 +6,7 @@ import { listReplyPlaybooks, reviewReplyPlaybook, decideReplyPlaybook, revokeRep
 import { prepareWorkPackage } from './work-package-prepare';
 import { storeWorkPackage, repairWorkPackage } from './work-packages';
 import { ingestConversation } from './inbox-sync';
+import { storeInboxPage } from './inbox-coverage';
 import { loadAccount } from '../execution/actions-repo';
 import { setJurisdictionPolicy } from './jurisdictions';
 import { setWorkspaceExecutionLimits } from './workspace-policy';
@@ -24,7 +25,7 @@ async function fixture(limits?:{accountPerDay:number;channelPerDay:number}) {
  const approveChild=()=>decideReplyPlaybook(f.engine,f.approver,book.id,{operationHash:book.operationHash!,decision:'approved',reason:'Reviewed account, conditions and bounds'});
  const incoming=(id='incoming',peer='peer@example.com')=>({threadId:'thread-'+peer,peerUrl:'mailto:'+peer,subject:'Pricing question',messages:[{id,text:'Please send pricing',inbound:true,at:f.now()}],updatedAt:f.now()});
  const ingest=(id='incoming',peer='peer@example.com')=>{f.advance(1000);ingestConversation(f.engine,account,incoming(id,peer));};
- const fresh=()=>f.engine.db.prepare('INSERT INTO inbox_cursors(account_id,polled_at) VALUES (?,?) ON CONFLICT(account_id) DO UPDATE SET polled_at=excluded.polled_at').run(account.id,f.now());
+ const fresh=()=>storeInboxPage(f.engine.db,account.id,{threads:[],nextCursor:'',coverage:{complete:true}},f.now());
  const reply=()=>f.engine.db.prepare("SELECT * FROM scheduled_actions WHERE kind='email.reply' ORDER BY created_at LIMIT 1").get<ActionRow>();
  return {f,rule,manifest,pkg,parent,book,account,approveParent,approveChild,incoming,ingest,fresh,reply};
 }

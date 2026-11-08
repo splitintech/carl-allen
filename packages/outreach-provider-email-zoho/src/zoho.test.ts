@@ -8,6 +8,7 @@ function fixture(){const calls:{method:string;path:string;body?:Record<string,un
  if(url.pathname==='/api/accounts/123')data={primaryEmailAddress:'owner@example.invalid'};
  else if(url.pathname.endsWith('/folders'))data=[{folderType:'Drafts',folderId:'88'}];
  else if(url.pathname.endsWith('/messages/view'))data=deleted?[]:[{messageId:'111',folderId:'88',toAddress:'person@example.invalid',subject:'Draft',summary:'Hello'}];
+ else if(url.pathname.endsWith('/details'))data=url.pathname.includes('/111/')&&!deleted?{messageId:'111',folderId:'88',toAddress:'person@example.invalid',subject:'Draft'}:{};
  else if(url.pathname.endsWith('/content'))data={content:url.pathname.includes('/99/')?'<p>Please send details</p><p>Full conversation body</p>':'Original draft'};
  else if(url.pathname.endsWith('/messages/search'))data=[{messageId:'321',folderId:'99',threadId:'999',fromAddress:'person@example.invalid',subject:'Reply',summary:'Please send details',receivedtime:900000}];
  else if(method==='POST')data={messageId:'222'};

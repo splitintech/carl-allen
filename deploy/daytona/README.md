@@ -93,7 +93,6 @@ out of browser state.
 .venv-daytona/bin/python deploy/daytona/manage.py refresh --state /absolute/private/outreach-connection.json
 .venv-daytona/bin/python deploy/daytona/manage.py watch --state /absolute/private/outreach-connection.json --interval 300
 .venv-daytona/bin/python deploy/daytona/manage.py status --state /absolute/private/outreach-connection.json
-.venv-daytona/bin/python deploy/daytona/manage.py login-link --state /absolute/private/outreach-connection.json
 ```
 
 `watch` refreshes the signed live-view URL before expiry. Standard preview tokens
@@ -104,7 +103,13 @@ disabled. Stop a runtime explicitly with Daytona when its campaigns are paused.
 
 ## Account login and browser tasks
 
-Use Papr's LinkedIn connection form to register the account and its canonical
+Use Carl-Allen Settings > Accounts to start or resume an account-specific private
+browser session. Connect opens the platform login, discovers the signed-in native
+identity, and asks you to confirm it. Reconnect checks the original identity. The
+legacy `manage.py login-link` command now directs you to this authenticated flow;
+an unscoped shared desktop link does not authorize browser access.
+
+The legacy explicit-identity registration accepts the canonical
 `https://www.linkedin.com/in/<slug>` identity. The protected admin endpoint creates
 an owner-only binding in `/data/outreach/social-bindings.json`, selects a unique
 loopback CDP port and derives the profile directory from the account identity.

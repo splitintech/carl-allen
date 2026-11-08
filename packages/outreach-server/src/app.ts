@@ -1,4 +1,11 @@
 import { registerReplyPlaybookRoutes } from './routes-reply-playbooks';
+import { registerSocialLoginRoutes } from './routes-social-login';
+import {registerAccountLifecycleRoutes} from './routes-account-lifecycle';
+import {registerInboxReplyRoutes} from './routes-inbox-replies';
+import {registerMailboxOAuthRoutes} from './routes-mailbox-oauth';
+import {registerMailboxDraftRoutes} from './routes-mailbox-drafts';
+import type {MailboxOAuthDependencies} from './mailbox-oauth-storage';
+import type {LoginDependencies} from './social-login';
 import { registerWorkspaceManagementRoutes } from './routes-workspace-management';
 import { handleRemoteMcp } from '@splitin/outreach-mcp';
 import { authenticateCloudRequest } from './cloud-auth';
@@ -25,6 +32,8 @@ export interface ServerOptions {
   /** JSON bodies; imports have their own larger limit. */
   readonly maxJsonBytes?: number;
   readonly maxImportBytes?: number;
+  readonly socialLogin?:LoginDependencies;
+  readonly mailboxOAuth?:MailboxOAuthDependencies;
 }
 
 export function auth(c: ServerContext): AuthContext {
@@ -98,5 +107,10 @@ export function createApp(options: ServerOptions): Hono<ServerEnv> {
   registerWorkspaceRoutes(app,engine);
   registerReplyPlaybookRoutes(app,engine);
   registerWorkspaceManagementRoutes(app,engine);
+  registerSocialLoginRoutes(app,engine,options.socialLogin);
+  registerAccountLifecycleRoutes(app,engine,options.socialLogin?.browser);
+  registerInboxReplyRoutes(app,engine);
+  registerMailboxOAuthRoutes(app,engine,options.mailboxOAuth);
+  registerMailboxDraftRoutes(app,engine,options.mailboxOAuth);
   return app;
 }

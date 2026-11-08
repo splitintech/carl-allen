@@ -1,3 +1,6 @@
+import {accountLifecycle} from '../domain/account-lifecycle';
+import {validatePublishingActionMedia} from '../domain/publishing-preflight';
+import {firstCommentIssues} from '@splitin/outreach-contracts';
 import type {
   ApprovedEmail,
   EmailContent,
@@ -24,6 +27,7 @@ export interface SocialPublishPayload {
   readonly mediaUrls?: readonly string[];
 }
 export interface SocialMessagePayload {
+  readonly threadId?: string;
   readonly channel: string;
   readonly targetUrl: string;
   readonly text: string;
@@ -77,6 +81,7 @@ export async function invokeProvider(
     return { kind: 'accepted', receipt: { providerMessageId: `manual:${action.id}`, acceptedAt: deps.now() } };
   }
   if (!account || !adapter) return { kind: 'rejected', errorClass: 'unsupported', detail: 'no adapter' };
+  if(accountLifecycle({db:deps.db},action.workspace_id,account.id))return {kind:'rejected',errorClass:'policy_blocked',detail:'Account disabled or disconnected before effect. Reconnect and prepare a fresh review.'};
   const signal = AbortSignal.timeout(actionProviderTimeout(deps, action));
   const ctx = providerContext(deps, account, traceId, signal);
   try {
@@ -86,6 +91,8 @@ export async function invokeProvider(
       return await adapter.notify.publish(ctx, { ...payload, idempotencyKey: action.idempotency_key });
     }
     if (action.kind === 'social.publish') {
+      let issues:string[];try{issues=await validatePublishingActionMedia(deps,action);}catch(error){return {kind:'rejected',errorClass:'unsupported',detail:'Media preflight: '+(error as Error).message};}
+      if(issues.length)return {kind:'rejected',errorClass:'unsupported',detail:issues.join('; ')};
       if (!adapter.social) return { kind: 'rejected', errorClass: 'unsupported', detail: 'no social port' };
       const payload = JSON.parse(action.payload) as SocialPublishPayload;
       return await adapter.social.publish(ctx, {
@@ -100,6 +107,7 @@ export async function invokeProvider(
     if (action.kind === 'social.comment') {
       if(!adapter.social?.comment)return {kind:'rejected',errorClass:'unsupported',detail:'No first-comment executor'};
       const payload=JSON.parse(action.payload) as {channel:string;text:string;_dependsOn:string};
+      const commentIssues=firstCommentIssues(payload.channel,payload.text);if(commentIssues.length)return {kind:'rejected',errorClass:'unsupported',detail:commentIssues.join('; ')};
       const parent=deps.db.prepare("SELECT aa.receipt FROM action_attempts aa JOIN scheduled_actions a ON a.id=aa.action_id WHERE a.workspace_id=? AND a.id=? AND a.state='succeeded' AND aa.outcome='succeeded' ORDER BY aa.attempt_no DESC LIMIT 1").get<{receipt:string}>(action.workspace_id,payload._dependsOn);
       if(!parent)return {kind:'rejected',errorClass:'policy_blocked',detail:'Confirmed publication receipt required'};
       const receipt=JSON.parse(parent.receipt) as {providerMessageId:string;raw?:{url?:string}};
@@ -126,6 +134,7 @@ export async function invokeProvider(
         channel: payload.channel,
         targetUrl: payload.targetUrl,
         text: payload.text,
+        ...(payload.threadId?{threadId:payload.threadId}:{}),
       });
     }
     if (!adapter.email) return { kind: 'rejected', errorClass: 'unsupported', detail: 'no email port' };

@@ -1,3 +1,8 @@
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {startPublishingUpload,appendPublishingChunk,completePublishingUpload} from '../domain/publishing-media';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerProviderAccount } from '../domain/operations';
 import { makeDomainEnv, type DomainTestEnv } from '../domain/domain.test-util';
@@ -8,16 +13,19 @@ import { executeDue } from './executor';
 import { sweepExpiredLeases } from './recovery';
 import { workerActor } from './actions-repo';
 describe('bounded media publishing execution', () => {
-  let env: DomainTestEnv; let accountId: string;
+  let env: DomainTestEnv; let accountId: string;let mediaRef:string;let mediaDir:string;
+  const video=execFileSync(process.env.OUTREACH_FFMPEG_PATH??'ffmpeg',['-v','error','-f','lavfi','-i','color=c=black:s=320x320:r=25:d=3','-c:v','libx264','-pix_fmt','yuv420p','-threads','1','-an','-movflags','frag_keyframe+empty_moov','-f','mp4','pipe:1'],{timeout:30000});
   beforeEach(async () => {
+    mediaDir=mkdtempSync(join(tmpdir(),'media-timeout-'));vi.stubEnv('OUTREACH_MEDIA_DIR',mediaDir);
     vi.useFakeTimers();
     vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => { const controller = new AbortController(); setTimeout(() => controller.abort(new DOMException('Provider budget expired', 'TimeoutError')), ms); return controller.signal; });
     env = await makeDomainEnv();
     accountId = await registerProviderAccount(env.engine, env.admin, { provider: 'fake-social', externalAccountId: 'owner', sender: { name: 'Owner', address: 'owner@example.org' }, purposes: ['social_publishing'], secretRef: 'env:FAKE_SOCIAL', executionPlacement: 'daytona-browser' });
+    const upload=startPublishingUpload(env.engine,env.admin,{name:'actual.mp4',mime:'video/mp4',size:video.length});appendPublishingChunk(env.engine,env.admin,upload.uploadId,0,video.toString('base64'));mediaRef=completePublishingUpload(env.engine,env.admin,upload.uploadId).mediaUrl;
   });
-  afterEach(() => { env.engine.db.close(); vi.clearAllTimers(); vi.restoreAllMocks(); vi.useRealTimers(); });
+  afterEach(() => { env.engine.db.close(); vi.clearAllTimers(); vi.restoreAllMocks(); vi.useRealTimers();vi.unstubAllEnvs();rmSync(mediaDir,{recursive:true,force:true}); });
   function queue(key: string, accountPerDay = 10): string {
-    return scheduleAction(env.engine, env.admin, { kind: 'social.publish', providerAccountId: accountId, payload: { channel: 'linkedin', text: 'Video', mediaUrls: [`outreach-media://${'a'.repeat(64)}`] }, dueAt: env.now(), approval: 'none', idempotencyKey: key, policy: PolicySchema.parse({ approval: 'none', unsubscribe: 'reply', requirePostalAddress: false, window: { timezone: 'UTC', fallback: 'UTC', days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], start: '00:00', end: '23:59' }, limits: { accountPerDay, channelPerDay: accountPerDay } }) }).actionId;
+    return scheduleAction(env.engine, env.admin, { kind: 'social.publish', providerAccountId: accountId, payload: { channel: 'linkedin', text: 'Video', mediaUrls: [mediaRef] }, dueAt: env.now(), approval: 'none', idempotencyKey: key, policy: PolicySchema.parse({ approval: 'none', unsubscribe: 'reply', requirePostalAddress: false, window: { timezone: 'UTC', fallback: 'UTC', days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], start: '00:00', end: '23:59' }, limits: { accountPerDay, channelPerDay: accountPerDay } }) }).actionId;
   }
   const action = (id: string) => env.engine.db.prepare('SELECT * FROM scheduled_actions WHERE id=?').get<ActionRow>(id)!;
   it('reserves the longer budget only for publishing attachments and constrains custom leases/config', () => {

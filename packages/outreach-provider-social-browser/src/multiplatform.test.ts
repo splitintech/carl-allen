@@ -1,3 +1,4 @@
+import {syntheticVideoBytes} from './video.test-util';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { createHash } from 'node:crypto';
@@ -16,9 +17,9 @@ const executable = process.env.OUTREACH_TEST_CHROME ?? [join(homedir(), 'Library
 let ctx: ProviderContext = { workspaceId: 'ws', account: { id: 'a', provider: 'social-browser', externalAccountId: 'owner', sender: { name: 'Owner', address: 'owner@example.com' } }, secretRef: 'env:SOCIAL', secrets: { get: async () => '' }, traceId: 'test', signal: AbortSignal.timeout(120000), now: Date.now };
 let root: string; let imageRef: string; let videoRef: string;
 const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
-const video = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(12)]);
+let video:Buffer;
 async function asset(bytes: Buffer): Promise<string> { const hash = createHash('sha256').update(bytes).digest('hex'); const directory = join(root, createHash('sha256').update('ws').digest('hex').slice(0, 24)); await mkdir(directory, { recursive: true, mode: 0o700 }); await writeFile(join(directory, hash), bytes, { mode: 0o600 }); return `outreach-media://${hash}`; }
-beforeAll(async () => { root = await mkdtemp(join(tmpdir(), 'publishing-assets-')); imageRef = await asset(image); videoRef = await asset(video); });
+beforeAll(async () => { root = await mkdtemp(join(tmpdir(), 'publishing-assets-')); video=syntheticVideoBytes(); imageRef = await asset(image); videoRef = await asset(video); });
 afterAll(async () => { await rm(root, { recursive: true, force: true }); });
 describe('immutable publishing media', () => {
   it('allows bounded video processing independently of shorter receipt/image waits', () => {

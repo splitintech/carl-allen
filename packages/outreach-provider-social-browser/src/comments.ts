@@ -1,3 +1,4 @@
+import {firstCommentIssues} from '@splitin/outreach-contracts';
 import type { ProviderContext, SendResult, SocialCommentInput } from '@splitin/outreach-contracts';
 import type { Page } from 'playwright';
 import type { AccountBinding } from './runtime';
@@ -19,7 +20,7 @@ async function ownPublication(page:Page,binding:AccountBinding,channel:string):P
   if(!url||!expected||profile(new URL(url,channel==='linkedin'?'https://www.linkedin.com':'https://www.instagram.com').href)!==profile(expected))throw new Error('Publication owner does not match the approved publishing identity');
 }
 export async function socialComment(session:SocialSession,ctx:ProviderContext,binding:AccountBinding,options:LinkedInOptions|NetworkOptions,input:SocialCommentInput):Promise<SendResult>{
-  let target:string;try{target=publicationUrl(input.channel,input.targetUrl);if(!input.text.trim()||input.text.length>2200)throw new Error('First comment requires 1..2200 characters');}catch(error){return{kind:'rejected',errorClass:'unsupported',detail:(error as Error).message};}
+  let target:string;try{target=publicationUrl(input.channel,input.targetUrl);const issues=firstCommentIssues(input.channel,input.text);if(!input.text.trim()||issues.length)throw new Error(issues.join('; ')||'First comment must contain text');}catch(error){return{kind:'rejected',errorClass:'unsupported',detail:(error as Error).message};}
   let crossed=false;let authenticated=false;let currentUrl:string|undefined;
   try{return await session.withPage(ctx.signal,async page=>{
     if(input.channel==='linkedin')await linkedInReady(page,binding,options);else await networkReady(page,binding,'instagram',options);authenticated=true;

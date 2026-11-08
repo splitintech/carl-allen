@@ -203,7 +203,7 @@ export async function refreshAccountCapabilities(env: DomainEnv, ctx: AuthContex
     const current = env.db.prepare('SELECT capabilities FROM provider_accounts WHERE workspace_id = ? AND id = ?').get<{ capabilities: string }>(ctx.workspaceId, accountId);
     if (!current) throw new NotFoundError('provider account');
     const stored = JSON.parse(current.capabilities) as import('@splitin/outreach-contracts').CapabilitySnapshot;
-    const capabilities = { ...discovered, executionPlacement: stored.executionPlacement };
+    const capabilities = { ...discovered, executionPlacement: stored.executionPlacement, ...(stored.publishingQualification?{publishingQualification:stored.publishingQualification}:{}) };
     env.db.prepare('UPDATE provider_accounts SET capabilities = ? WHERE workspace_id = ? AND id = ?').run(JSON.stringify(capabilities), ctx.workspaceId, accountId);
     audit(env.db, ctx, env.now(), 'provider_account', accountId, 'capabilities_refreshed', { provider: account.provider, recipeIds: Object.keys(capabilities.browserRecipeHashes ?? {}) });
     return capabilities;

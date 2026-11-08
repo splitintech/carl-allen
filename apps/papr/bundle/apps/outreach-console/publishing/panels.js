@@ -1,4 +1,5 @@
 import {mailboxAccounts} from './mailbox-accounts.js';
+import {manualReplyPanel} from './inbox-replies.js';
 import {renderHome} from './home.js';
 import {renderOutreach} from './outreach.js';
 import {renderInsights,storageSummary} from './insights.js';
@@ -25,7 +26,7 @@ export function renderPeople(data, refresh) {
 export function renderInbox(data, refresh, tab = 'conversations', onTab = () => {}) {
   const root = el('div', { class: 'stack' }, el('div', { class: 'view-tabs' }, button('Conversations', () => onTab('conversations'), tab === 'conversations' ? 'active' : ''), button('Mailbox drafts', () => onTab('drafts'), tab === 'drafts' ? 'active' : ''),button('Reply playbooks',()=>onTab('replies'),tab==='replies'?'active':'')));
   if(tab==='replies'){root.append(renderReplyPlaybooks(data,refresh));return root;}
-  if (tab === 'drafts') { root.append(renderMailbox(data)); return root; }
+  if (tab === 'drafts') { root.append(renderMailbox(data,refresh)); return root; }
   root.append(renderInboxMonitoring(data));
   const threads = data.threads || []; const panel = el('section', { class: 'content-panel' }, el('div', { class: 'panel-toolbar' }, el('h2', { text: 'Conversations & follow-ups' }), el('small', { class: 'muted', text: 'Synced conversation data' })));
   if (!threads.length) panel.append(el('div', { class: 'empty-state' }, el('h3', { text: 'A place for your conversations' }), el('p', { text: 'Connected accounts appear here after inbox synchronization. Check the account and monitoring status before relying on automated follow-ups.' })));
@@ -38,7 +39,7 @@ function openThread(thread, data, refresh) {
   const assignee = el('select', { class: 'field-control', 'aria-label': 'Assign conversation' }, el('option', { value: '', text: 'Unassigned' }), ...(data.members || []).map((member) => el('option', { value: member.id || member.principalId, text: member.email || member.name || member.id }))); assignee.value = thread.assignedTo || '';
   const notes=el('textarea',{class:'field-control',name:'notes',rows:4,maxlength:10000});notes.value=thread.notes||'';
   if(!authorized(data,['admin','operator','approver'])){notes.readOnly=true;assignee.disabled=true;}
-  body.append(field('Team notes',notes),field('Assigned teammate', assignee), el('p', { class: 'flow-note', text: 'Replies stop the original outreach sequence. Only matching, separately approved reply playbooks may continue automatically. Prepare other responses in Papr/ChatGPT or save a mailbox draft.' })); m.content.append(body); m.bottom.append(button('Close', m.close));
+  body.append(field('Team notes',notes),field('Assigned teammate', assignee), el('p', { class: 'flow-note', text: 'Replies stop the original outreach sequence. Separately approved reply playbooks can respond automatically. Manual social responses require exact review below.' }),manualReplyPanel(thread,data,refresh)); m.content.append(body); m.bottom.append(button('Close', m.close));
   if (authorized(data, ['admin', 'operator', 'approver'])) { const save = button('Save assignment', () => busy(save, async () => { await api('inbox-assign', { threadId: thread.id, principalId: assignee.value || null,notes:notes.value }); m.close(); await refresh(); notify('Conversation assignment updated.'); }), 'primary'); m.bottom.append(save); }
 }
 export function renderSettings(data, refresh, tab = 'accounts', onTab = () => {}) {

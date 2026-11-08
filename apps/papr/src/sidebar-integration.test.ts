@@ -18,7 +18,7 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 async function fixture() {
   const dir = mkdtempSync(join(tmpdir(), 'sidebar-fullstack-')); vi.stubEnv('OUTREACH_MEDIA_DIR', dir); vi.stubEnv('OUTREACH_CONNECTION_FILE', ''); vi.stubEnv('DAYTONA_SANDBOX_ID', '');
   const db = openSqliteDatabase(':memory:'); const fake = new FakeSocialProvider(); const adapter = fake.adapter(); let now = Date.now();
-  adapter.social!.conversations = async () => ({ threads: [{ threadId: 'fixture-iris-thread', peerUrl: 'https://www.linkedin.com/in/iris/', subject: 'Fixture research reply', updatedAt: now - 1000, messages: [{ id: 'fixture-iris-reply', inbound: true, text: 'Please send the study.', at: now - 1000 }] }], nextCursor: 'fixture-cursor' });
+  adapter.social!.conversations = async () => ({ threads: [{ threadId: 'fixture-iris-thread', peerUrl: 'https://www.linkedin.com/in/iris/', subject: 'Fixture research reply', updatedAt: now - 1000, messages: [{ id: 'fixture-iris-reply', inbound: true, text: 'Please send the study.', at: now - 1000 }] }], nextCursor: 'fixture-cursor', coverage: {complete:true,folders:['linkedin:inbox']} });
   const engine = createEngine({ db, adapters: [adapter], secrets: staticSecrets({ 'env:SIDEBAR_FAKE_SOCIAL': FAKE_SOCIAL_SECRET }), workerId: 'sidebar-fixture', now: () => now });
   bootstrapWorkspace(db, { workspaceId: 'sidebar-fixture', name: 'Sidebar fixture workspace', adminRef: 'fixture:owner', adminName: 'Fixture owner' }, now);
   const ctx = authenticate(db, 'sidebar-fixture', 'fixture:owner', 'test', 'sidebar-fullstack'); const teammate = ulid(now);
@@ -29,7 +29,7 @@ async function fixture() {
     const html = `<html><h1>${name}</h1></html>`; const pack = storeWorkPackage(engine, ctx, { name, html, manifest, issues: [], sourceHash: sha256Hex(html) }); repairWorkPackage(engine, ctx, pack.id, { accountMap: { owner: accountId } }); const plan = prepareWorkPackage(engine, ctx, pack.id); expect(plan.preview.issues).toEqual([]); return { pack, plan };
   }
   const approved = prepare('approved-ada', 'Approved Ada outreach'); decideApproval(engine, ctx, { approvalId: approved.plan.authorizationId!, operationHash: approved.plan.operationHash!, decision: 'approved' });
-  now += 60000; await engine.runOnce(); expect(fake.messageCalls).toBe(1); expect(fake.deliveries[0]?.text).toBe('Hello Ada, your study is ready.');
+  await pollSocialInboxes(engine); now += 60000; await engine.runOnce(); expect(fake.messageCalls).toBe(1); expect(fake.deliveries[0]?.text).toBe('Hello Ada, your study is ready.');
   const pending = prepare('pending-outreach', 'Outreach-only pending review'); await pollSocialInboxes(engine);
   const token = createApiToken(engine, ctx, { principalId: ctx.principalId, name: 'Private admin bridge', roleCeiling: 'admin', ttlDays: 1 }).token;
   const viewerToken = createApiToken(engine, ctx, { principalId: ctx.principalId, name: 'Private viewer bridge', roleCeiling: 'viewer', ttlDays: 1 }).token;

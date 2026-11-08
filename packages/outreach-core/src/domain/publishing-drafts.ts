@@ -1,8 +1,10 @@
+import {accountLifecycle} from './account-lifecycle';
+import { publicationMediaIssues } from './publishing-preflight';
 import { enqueueAction } from '../execution/enqueue';
 import { actorOf } from './auth';
 import { createPlanAuthorization, SCHEDULE_HORIZON_MS } from './cloud-plans';
 import type { ActionRow } from '../execution/types';
-import { publishingFormatIssues, ulid, type CapabilitySnapshot } from '@splitin/outreach-contracts';
+import { firstCommentIssues, publishingFormatIssues, ulid, type CapabilitySnapshot } from '@splitin/outreach-contracts';
 import { ConflictError, NotFoundError, audit, requireRole, type AuthContext } from './auth';
 import type { DomainEnv } from './env';
 import { newPlanPolicy } from './workspace-policy';
@@ -56,7 +58,8 @@ export function postIssues(env: DomainEnv, ctx: AuthContext, draft: PublishingDr
   for (const post of draft.posts) {
     const add = (reason: string) => issues.push({ channel: post.channel, reason });
     const limits = PUBLISHING_LIMITS.platforms[post.channel];
-    if(post.firstComment && !['linkedin','instagram'].includes(post.channel))add('First comments are supported only on LinkedIn and Instagram');
+    for(const problem of firstCommentIssues(post.channel,post.firstComment))add(problem);
+    for(const problem of publicationMediaIssues(env,ctx,post.channel,post.mediaIds))add(problem);
     if(post.firstComment && !env.adapters.get(env.db.prepare('SELECT provider FROM provider_accounts WHERE id=?').get<{provider:string}>(post.accountId??'')?.provider??'')?.social?.comment) add('First comments are unavailable for this account');
     if (Array.from(post.text).length > limits.text) add(`Caption exceeds${limits.text} characters`);
     if (!post.text.trim() && !post.mediaIds.length) add('Add a caption or media');
@@ -71,7 +74,9 @@ export function postIssues(env: DomainEnv, ctx: AuthContext, draft: PublishingDr
     if (!post.accountId) { add('Connect and select an account'); continue; }
     const account = env.db.prepare('SELECT provider,capabilities,health,purposes FROM provider_accounts WHERE workspace_id=? AND id=?').get<{ provider: string; capabilities: string; health: string; purposes: string }>(ctx.workspaceId, post.accountId);
     if (!account) { add('Account is unavailable in this workspace'); continue; }
+    if(accountLifecycle(env,ctx.workspaceId,post.accountId))add('This account is disabled or disconnected. Reconnect and verify it, then prepare a new review.');
     const caps = JSON.parse(account.capabilities) as CapabilitySnapshot;
+    if(caps.requiresPublishingQualification&&(!caps.publishingQualification?.formats.includes(post.format??'feed')||caps.publishingQualification.checkedAt<env.now()-86400000))add(caps.publishingQualification?.detail??'Check native publishing permissions and this format in Accounts before submitting for review');
     if (!caps.socialPublish || caps.executionPlacement !== 'daytona-browser' || !caps.socialChannels?.includes(post.channel) || !env.adapters.get(account.provider)?.social?.publish) add('The account has no publishing executor for this platform');
     if (!(JSON.parse(account.purposes) as string[]).includes('social_publishing')) add('The account has not enabled social publishing');
     if (account.health !== 'ok') add('Sign into the account and check its connection');

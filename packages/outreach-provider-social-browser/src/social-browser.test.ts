@@ -1,3 +1,4 @@
+import {syntheticVideoBytes} from './video.test-util';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
@@ -161,7 +162,7 @@ describe('social browser with real Chromium against a local fixture', () => {
   it('uploads immutable video bytes and confirms LinkedIn media before posting', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'outreach-linkedin-video-'));
     const workspace = createHash('sha256').update('ws').digest('hex').slice(0, 24);
-    const bytes = Buffer.concat([Buffer.from([0,0,0,24]), Buffer.from('ftypisom'), Buffer.alloc(12)]);
+    const bytes = syntheticVideoBytes();
     const hash = createHash('sha256').update(bytes).digest('hex');
     await mkdir(join(dir, workspace), { mode: 0o700 }); await writeFile(join(dir, workspace, hash), bytes, { mode: 0o600 });
     const videos = socialBrowserAdapter({runtime:{kind:'fixture',sandboxId:'fixture'},origin,confirmationTimeoutMs:10000,media:{allowedOrigins:[],assetDirectory:dir},accountBindings:{'li-1':{expectedProfileUrl:sender,pageFactory:()=>context.newPage()}}});
