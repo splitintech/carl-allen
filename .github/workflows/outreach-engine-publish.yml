@@ -33,7 +33,7 @@ jobs:
           TAG_SHA=$(git rev-parse "refs/tags/$RELEASE_TAG")
           gh api "repos/$GITHUB_REPOSITORY/git/tags/$TAG_SHA" --jq '.verification.verified' | grep -qx true
           git merge-base --is-ancestor "refs/tags/$RELEASE_TAG^{}" origin/main
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
