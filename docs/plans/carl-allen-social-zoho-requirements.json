@@ -250,7 +250,7 @@
   ],
   "operationalEvidence": {
     "git": "record exact delivered revisions in release/PR receipt",
-    "daytona": "pending source activation and migrations 0013 through 0015; deployment receipt is separate from source tests"
+    "daytona": "Recorded separately in runtime-verification.json: exact active source, fifteen migrations, integrity, readiness, service counts, rollback artifacts and provider-account counts. Source fixtures do not assert an active deployment."
   },
   "limitations": [
     "Unknown or incomplete native inbox coverage holds follow-ups. Multi-peer/group conversations require manual handling.",
