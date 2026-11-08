@@ -6,9 +6,11 @@ import { publishingDirectory, digestMedia, verifyMediaFile } from './publishing-
 const verified = new Map<string, string>();
 export const activeMediaReads = new Map<string, number>();
 export function verifyCachedMedia(path: string, size: number, hash: string): void {
-  verifyMediaFile(path, size); const info=lstatSync(path);
-  const stamp=[info.dev,info.ino,info.size,info.mtimeMs,info.ctimeMs].join(':');
-  if(verified.get(path)===stamp)return;
+  verifyMediaFile(path, size); const info=lstatSync(path,{bigint:true});
+  const stamp=[hash,info.dev,info.ino,info.size,info.mtimeNs,info.ctimeNs].join(':');
+  // Some mounted filesystems coarsen timestamps. Rehash recent writes instead of
+  // accepting a same-size mutation inside that timestamp's resolution window.
+  if(verified.get(path)===stamp&&Date.now()-Number(info.ctimeMs)>=2000)return;
   if(digestMedia(path).sha256!==hash)throw new Error('Stored media checksum mismatch');
   if(verified.size>=1000)verified.delete(verified.keys().next().value!);
   verified.set(path,stamp);
