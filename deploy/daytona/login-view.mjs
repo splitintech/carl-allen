@@ -1,5 +1,5 @@
 import {randomBytes,randomUUID} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {closeSync,existsSync,lstatSync,mkdirSync,openSync,renameSync,writeFileSync} from 'node:fs';
 import {dirname,resolve,sep} from 'node:path';
 import {connect} from 'node:net';
@@ -31,7 +31,10 @@ export class LoginView {
  async stop(){if(!this.child)return;const child=this.child;await this.killGroup(child);this.child=null;}
  async launch(){
   if(await this.portListening(this.port))throw new Error('Private desktop port is already owned; no browser work was started');
-  const args=[`--web=${this.webRoot}`,'--file-only','--token-plugin=TokenFile',`--token-source=${this.tokenFile}`,String(this.port)];
+  // Debian's older websockify has TokenFile but lacks the optional listing flag.
+  // Authorization always comes from TokenFile, whose file stays outside webRoot.
+  const help=spawnSync(this.executable,['--help'],{encoding:'utf8',stdio:['ignore','pipe','ignore'],timeout:5000,maxBuffer:131072});
+  const args=[`--web=${this.webRoot}`,...(help.stdout?.includes('--file-only')?['--file-only']:[]),'--token-plugin=TokenFile',`--token-source=${this.tokenFile}`,String(this.port)];
   const descriptor=this.logFile?openSync(this.logFile,'a',0o600):null;
   try{this.child=this.spawnProcess(this.executable,args,{detached:true,stdio:descriptor===null?'ignore':['ignore',descriptor,descriptor]});}finally{if(descriptor!==null)closeSync(descriptor);}
   this.failed=false;const child=this.child;child.once('error',()=>{if(this.child===child)this.failed=true;});
