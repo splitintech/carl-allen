@@ -720,7 +720,14 @@
       "id": "G03",
       "gate": "New source/database migrations active on existing Daytona runtime",
       "owner": "runtime-operator",
-      "status": "not-yet-accepted"
+      "status": "tracked-in-runtime-deployment-receipt",
+      "evidence": "external:runtime-verification.json",
+      "baseline": {
+        "sourceRevision": "a33442316740200e463408a9d230efe16c0c0bf4",
+        "migrationCount": 12,
+        "accepted": true
+      },
+      "requiredMigrationCount": 15
     },
     {
       "id": "G04",
