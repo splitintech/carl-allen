@@ -28,7 +28,7 @@
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "check:packed": "node scripts/check-packed.mjs",
     "check:migration": "python3 scripts/check-migration.py",
-    "test:runtime": "node --test deploy/daytona/runtime-files.test.mjs deploy/daytona/browser-pool.test.mjs scripts/cloud-recovery.test.mjs && python3 -m unittest discover -s deploy/daytona/tests -v",
+    "test:runtime": "node --test deploy/daytona/runtime-files.test.mjs deploy/daytona/browser-pool.test.mjs deploy/daytona/login-view.test.mjs scripts/cloud-recovery.test.mjs && python3 -m unittest discover -s deploy/daytona/tests -v",
     "test:browser": "node scripts/browser-fixtures.mjs",
     "studio:build": "node scripts/build-publishing.mjs",
     "studio": "node scripts/publishing-preview.mjs",

@@ -1,3 +1,4 @@
+import {connectionActions} from './connection-actions.js';
 import {createUploader} from './uploads.js';
 /* global location, document, fetch, URLSearchParams, FileReader, Blob, URL, atob */
 import { call } from '../ui/api.js';
@@ -7,6 +8,7 @@ const id = (value) => { if (typeof value !== 'string' || (value.length < 1 || va
 const pageQuery = (p) => { const q = new URLSearchParams(); for (const key of ['from', 'to', 'cursor', 'limit', 'accountId', 'channel']) if (p[key] !== undefined && p[key] !== '') q.set(key, String(p[key])); return q.size ? `?${q}` : ''; };
 export function restAction(action, p = {}) {
   const map = {
+    ...connectionActions(p,id),
     'home-overview':()=>['GET','/v1/home'],
     'outreach-review':()=>['GET',`/v1/outreach/sequences/${id(p.sequenceId)}`],
     'outreach-resume':()=>['POST',`/v1/outreach/sequences/${id(p.sequenceId)}/resume`,{}],
@@ -34,7 +36,7 @@ export function restAction(action, p = {}) {
     'publishing-upload-cancel': () => ['DELETE', `/v1/publishing/uploads/${id(p.uploadId)}`],
     'publishing-media-read': () => ['GET', `/v1/publishing/media/${id(p.assetId)}?offset=${encodeURIComponent(p.offset ?? 0)}&length=${encodeURIComponent(p.length ?? 65536)}`],
     'publishing-media-delete': () => ['DELETE', `/v1/publishing/media/${id(p.assetId)}`],
-    'drafts-list': () => ['GET', `/v1/accounts/${id(p.accountId)}/drafts`],
+    'drafts-list': () => ['GET', `/v1/accounts/${id(p.accountId)}/drafts${p.cursor?'?cursor='+encodeURIComponent(p.cursor):''}`],
     'drafts-get': () => ['GET', `/v1/accounts/${id(p.accountId)}/drafts/${id(p.draftId)}`],
     'drafts-save': () => ['POST', `/v1/accounts/${id(p.accountId)}/drafts`, p.input],
     'drafts-delete': () => ['DELETE', `/v1/accounts/${id(p.accountId)}/drafts/${id(p.draftId)}`],

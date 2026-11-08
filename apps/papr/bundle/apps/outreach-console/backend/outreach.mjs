@@ -5,6 +5,7 @@
 
 import { readFileSync, lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import {renewLocalBrowserView,browserUrl} from './private-browser.mjs';
 
 const ID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 const HASH = /^[0-9a-f]{64}$/;
@@ -33,7 +34,7 @@ function connection() {
     try { saved = JSON.parse(readFileSync(process.env.OUTREACH_CONNECTION_FILE, 'utf8')); } catch { throw new BadInput('Cannot parse the private connection file; refresh it with the runtime connection command'); }
     if (saved.apiTokenExpiresAt && Date.now() >= (typeof saved.apiTokenExpiresAt === 'number' ? saved.apiTokenExpiresAt : Date.parse(saved.apiTokenExpiresAt))) throw new BadInput('Daytona connection expired; renew it with the runtime connection command');
   }
-  return { apiUrl: saved.apiUrl || process.env.OUTREACH_API_URL, apiToken: saved.apiToken || process.env.OUTREACH_API_TOKEN, previewToken: saved.previewToken || process.env.OUTREACH_PREVIEW_TOKEN, liveViewUrl: saved.liveViewUrl || process.env.OUTREACH_DAYTONA_LIVE_VIEW_URL };
+  return { apiUrl: saved.apiUrl || process.env.OUTREACH_API_URL, apiToken: saved.apiToken || process.env.OUTREACH_API_TOKEN, previewToken: saved.previewToken || process.env.OUTREACH_PREVIEW_TOKEN, liveViewUrl: saved.liveViewUrl || process.env.OUTREACH_DAYTONA_LIVE_VIEW_URL,sandboxId:saved.sandboxId,expiresAt:saved.expiresAt??0 };
 }
 
 async function api(method, path, body) {
@@ -49,7 +50,7 @@ async function api(method, path, body) {
     method,
     headers: { authorization: `Bearer ${settings.apiToken}`, ...(settings.previewToken ? { 'x-daytona-preview-token': settings.previewToken } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(path.endsWith('/qualify')?240_000:60_000),
     redirect: 'error',
   });
   const data = await res.json().catch(() => ({}));
@@ -69,6 +70,32 @@ function object(params, key) {
 }
 
 const ACTIONS = {
+  'social-login-view':async p=>{const opened=await api('POST',`v1/social/connections/${need(p,'sessionId',ID)}/open`,{});if(!/^websockify\?token=[a-f0-9]{64}$/.test(opened.desktopPath??''))throw new Error('Upgrade the runtime to enable private session-bound browser views.');const url=await renewLocalBrowserView(connection());const view=new URL(url??browserUrl(connection().liveViewUrl));view.searchParams.set('path',opened.desktopPath);return{url:view.href};},
+  'mailbox-oauth-config':()=>api('GET','v1/mailboxes/oauth/config'),
+  'mailbox-oauth-start':p=>api('POST','v1/mailboxes/oauth/start',object(p,'input')),
+  'mailbox-oauth-status':p=>api('GET',`v1/mailboxes/oauth/${need(p,'sessionId',ID)}`),
+  'mailbox-oauth-complete':p=>api('POST',`v1/mailboxes/oauth/${need(p,'sessionId',ID)}/complete`,{mailboxId:need(p,'mailboxId')}),
+  'mailbox-disconnect':p=>api('POST',`v1/accounts/${need(p,'accountId',ID)}/mailbox-disconnect`,{reason:need(p,'reason')}),
+  'mailbox-info':p=>api('GET',`v1/accounts/${need(p,'accountId',ID)}/mailbox-info`),
+  'draft-upload-start':p=>api('POST',`v1/accounts/${need(p,'accountId',ID)}/draft-uploads`,object(p,'input')),
+  'draft-upload-status':p=>api('GET',`v1/accounts/${need(p,'accountId',ID)}/draft-uploads/${need(p,'uploadId',ID)}`),
+  'draft-upload-chunk':p=>api('PUT',`v1/accounts/${need(p,'accountId',ID)}/draft-uploads/${need(p,'uploadId',ID)}`,{index:p.index,data:need(p,'data')}),
+  'draft-upload-complete':p=>api('POST',`v1/accounts/${need(p,'accountId',ID)}/draft-uploads/${need(p,'uploadId',ID)}/complete`,{}),
+  'draft-upload-cancel':p=>api('DELETE',`v1/accounts/${need(p,'accountId',ID)}/draft-uploads/${need(p,'uploadId',ID)}`),
+  'mailbox-oauth-callback':p=>api('GET',`v1/mailboxes/oauth/${need(p,'provider',/^(gmail|outlook|zoho)$/)}/callback?`+new URLSearchParams(Object.entries(object(p,'query')).filter(([k,v])=>['code','state','error','location'].includes(k)&&typeof v==='string'))),
+  'inbox-replies':p=>api('GET',`v1/inbox/threads/${need(p,'threadId',ID)}/replies`),
+  'inbox-reply-prepare':p=>api('POST',`v1/inbox/threads/${need(p,'threadId',ID)}/replies/prepare`,{text:need(p,'text'),...(p.idempotencyKey?{idempotencyKey:need(p,'idempotencyKey')}:{})}),
+  'social-login-start':p=>api('POST','v1/social/connections',object(p,'input')),
+  'social-login-list':()=>api('GET','v1/social/connections'),
+  'social-login-get':p=>api('GET',`v1/social/connections/${need(p,'sessionId',ID)}`),
+  'social-login-check':p=>api('POST',`v1/social/connections/${need(p,'sessionId',ID)}/check`,{}),
+  'social-login-open':p=>api('POST',`v1/social/connections/${need(p,'sessionId',ID)}/open`,{}),
+  'social-login-confirm':p=>api('POST',`v1/social/connections/${need(p,'sessionId',ID)}/confirm`,object(p,'input')),
+  'social-login-cancel':p=>api('POST',`v1/social/connections/${need(p,'sessionId',ID)}/cancel`,{}),
+  'social-login-pause':p=>api('POST',`v1/social/connections/${need(p,'sessionId',ID)}/pause`,{}),
+  'social-login-resume':p=>api('POST',`v1/social/connections/${need(p,'sessionId',ID)}/resume`,{}),
+  'account-qualify':p=>api('POST',`v1/accounts/${need(p,'accountId',ID)}/qualify`,p.input?object(p,'input'):{}),
+  'account-disconnect':p=>api('POST',`v1/accounts/${need(p,'accountId',ID)}/disconnect`,object(p,'input')),
   'storage-cleanup': () => api('POST','v1/publishing/media-cleanup',{}),
   'publishing-plan-prepare': (p) => api('POST','v1/publishing/plans/'+need(p,'draftId',ID)+'/prepare',{}),
   'reply-playbooks':(p)=>api('GET','v1/reply-playbooks?cursor='+encodeURIComponent(p.cursor??'')+'&limit='+String(Math.min(200,p.limit??100))),
@@ -159,7 +186,7 @@ const ACTIONS = {
   'account-register': (p) => api('POST', 'v1/accounts', object(p, 'input')),
   'account-check': (p) => api('POST', `v1/accounts/${need(p, 'accountId', ID)}/check`),
   'account-reconnect': (p) => api('POST', `v1/accounts/${need(p, 'accountId', ID)}/reconnect`),
-  'drafts-list': (p) => api('GET', `v1/accounts/${need(p, 'accountId', ID)}/drafts`),
+  'drafts-list': (p) => api('GET', `v1/accounts/${need(p, 'accountId', ID)}/drafts${p.cursor?'?cursor='+encodeURIComponent(need(p,'cursor')):''}`),
   'drafts-get': (p) => api('GET', `v1/accounts/${need(p, 'accountId', ID)}/drafts/${encodeURIComponent(need(p, 'draftId'))}`),
   'drafts-save': (p) => api('POST', `v1/accounts/${need(p, 'accountId', ID)}/drafts`, object(p, 'input')),
   'drafts-delete': (p) => api('DELETE', `v1/accounts/${need(p, 'accountId', ID)}/drafts/${encodeURIComponent(need(p, 'draftId'))}`),

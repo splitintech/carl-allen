@@ -1,3 +1,4 @@
+import {accountLifecycle} from './account-lifecycle';
 import { purposePermitted, type CapabilitySnapshot, type ProviderPurpose, type SenderIdentity } from '@splitin/outreach-contracts';
 import type { DomainEnv } from './env';
 import type { ContentCalendar, Playbook } from './playbook';
@@ -12,10 +13,13 @@ export function executionAccountIssues(env: DomainEnv, workspaceId: string, kind
     }>(workspaceId, accountId);
     if (!account)
         return [`provider account ${accountId} does not exist in this workspace`];
+    const lifecycle=accountLifecycle(env,workspaceId,accountId);
+    if(lifecycle)return ['Account is '+lifecycle.status+'; reconnect and verify it before preparing new work'];
     const adapter = env.adapters.get(account.provider);
     if (!adapter)
         return [`no adapter registered for provider ${account.provider}`];
     const caps = JSON.parse(account.capabilities || '{}') as CapabilitySnapshot;
+    if(kind==='social.publish'&&caps.requiresPublishingQualification&&!caps.publishingQualification?.formats.length)return['Check native publishing permissions and formats in Accounts before preparing work'];
     const social = kind.startsWith('social.');
     const need: ProviderPurpose = (kind === 'social.publish' || kind === 'social.comment') ? 'social_publishing' : social ? 'social_messaging' : purpose;
     const issues: string[] = [];

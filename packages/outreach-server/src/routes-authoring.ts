@@ -1,11 +1,10 @@
+import {accountLifecycle} from '@splitin/outreach-core';
 import { registerConfiguredAccount } from './browser-binding';
-import { PROVIDER_PURPOSES, OUTREACH_API_VERSION, ulid, type EmailContent, type ProviderContext, type SenderIdentity } from '@splitin/outreach-contracts';
-import { audit, hasRole, checkAccountHealth, refreshAccountCapabilities, findTemplate, createTemplate, createContentCampaign, activateContentCampaign, requireRole, NotFoundError, ForbiddenError, listContentCampaigns, getContentCampaign, updateContentCampaign, deleteContentCampaign, updateScheduledAction, cancelScheduledAction, convertSocialActionToManual, scheduleAction, type Engine, type AuthContext } from '@splitin/outreach-core';
+import { PROVIDER_PURPOSES, OUTREACH_API_VERSION, ulid, type ProviderContext, type SenderIdentity } from '@splitin/outreach-contracts';
+import { audit, hasRole, checkAccountHealth, refreshAccountCapabilities, findTemplate, createTemplate, createContentCampaign, activateContentCampaign, requireRole, NotFoundError, listContentCampaigns, getContentCampaign, updateContentCampaign, deleteContentCampaign, updateScheduledAction, cancelScheduledAction, convertSocialActionToManual, scheduleAction, type Engine, type AuthContext } from '@splitin/outreach-core';
 import { z } from 'zod';
 import type { Hono } from 'hono';
 import { auth, type ServerEnv } from './app';
-const address = z.object({ address: z.string().email(), name: z.string().max(200).optional() }).strict();
-const mail = z.object({ id: z.string().max(500).optional(), from: address, to: z.array(address).max(100), replyTo: address.optional(), subject: z.string().max(1000), text: z.string().max(100_000), html: z.string().max(200_000).optional(), headers: z.record(z.string(), z.string()).default({}), inReplyTo: z.string().optional(), references: z.array(z.string()).optional(), providerThreadId: z.string().optional() }).strict();
 const reason = z.object({ reason: z.string().min(1).max(500) }).strict();
 
 export function accountContext(engine: Engine, ctx: AuthContext, accountId: string): { provider: string; context: ProviderContext } {
@@ -38,7 +37,7 @@ export function registerAuthoringRoutes(app: Hono<ServerEnv>, engine: Engine): v
     const ctx = auth(c); requireRole(ctx, 'viewer');
     const row = engine.db.prepare('SELECT id, kind, state, state_reason, provider_account_id, due_at, attempt_count, approval_id, content_hash FROM scheduled_actions WHERE workspace_id = ? AND id = ?').get<{ id: string; kind: string; state: string; state_reason: string|null; provider_account_id:string|null; due_at:number; attempt_count:number; approval_id:string|null; content_hash:string }>(ctx.workspaceId, c.req.param('id'));
     if (!row) throw new NotFoundError('scheduled action');
-    const attempts = engine.db.prepare('SELECT attempt_no, outcome, error_class, receipt, started_at, finished_at FROM action_attempts WHERE action_id = ? ORDER BY attempt_no').all<{attempt_no:number;outcome:string;error_class:string|null;receipt:string|null;started_at:number;finished_at:number|null}>(row.id);
+    const attempts = engine.db.prepare('SELECT attempt_no, outcome, error_class, error_detail, receipt, started_at, finished_at FROM action_attempts WHERE action_id = ? ORDER BY attempt_no').all<{attempt_no:number;outcome:string;error_class:string|null;error_detail:string|null;receipt:string|null;started_at:number;finished_at:number|null}>(row.id);
     return c.json({ ...row, actionId: row.id, attempts: attempts.map((attempt) => ({ ...attempt, receipt: attempt.receipt ? JSON.parse(attempt.receipt) as unknown : null })) });
   });
   app.patch('/v1/actions/:id', async (c) => c.json(updateScheduledAction(engine, auth(c), c.req.param('id'), z.object({ text: z.string().max(100_000).optional(), mediaUrls: z.array(z.string().url().refine((u) => u.startsWith('https://'))).max(4).optional(), scheduledFor: z.string().datetime({ offset: true }).optional(), input: z.record(z.string(), z.unknown()).optional() }).strict().parse(await c.req.json()))));
@@ -48,7 +47,7 @@ export function registerAuthoringRoutes(app: Hono<ServerEnv>, engine: Engine): v
   app.get('/v1/accounts', (c) => {
     const ctx = auth(c); requireRole(ctx, 'viewer');
     const accounts = engine.db.prepare('SELECT id, provider, external_account_id, sender_identity, purposes, capabilities, health, health_detail FROM provider_accounts WHERE workspace_id = ? ORDER BY id').all<{id:string;provider:string;external_account_id:string;sender_identity:string;purposes:string;capabilities:string;health:string;health_detail:string|null}>(ctx.workspaceId);
-    return c.json({ accounts: accounts.map((row) => ({ id: row.id, provider: row.provider, externalAccountId: row.external_account_id, sender: JSON.parse(row.sender_identity) as SenderIdentity, purposes: JSON.parse(row.purposes) as string[], capabilities: JSON.parse(row.capabilities) as unknown, health: row.health, detail: row.health_detail, drafts: !!engine.adapters.get(row.provider)?.drafts })) });
+    return c.json({ accounts: accounts.map((row) => ({ id: row.id, provider: row.provider, externalAccountId: row.external_account_id, sender: JSON.parse(row.sender_identity) as SenderIdentity, purposes: JSON.parse(row.purposes) as string[], capabilities: JSON.parse(row.capabilities) as unknown, health: row.health, detail: row.health_detail, lifecycle:accountLifecycle(engine,ctx.workspaceId,row.id), drafts: !!engine.adapters.get(row.provider)?.drafts })) });
   });
   app.post('/v1/accounts', async (c) => {
     const ctx = auth(c); requireRole(ctx, 'admin');
@@ -62,28 +61,5 @@ export function registerAuthoringRoutes(app: Hono<ServerEnv>, engine: Engine): v
     const result = await checkAccountHealth(engine, c.req.param('id'));
     audit(engine.db, ctx, engine.now(), 'provider_account', c.req.param('id'), operation, { status: result.status });
     return c.json({ ...result, liveViewUrl: hasRole(ctx,'admin') ? process.env.OUTREACH_DAYTONA_LIVE_VIEW_URL ?? null : null });
-  });
-  const drafts = (ctx: AuthContext, id: string, mutate = false) => {
-    requireRole(ctx, mutate ? 'operator' : 'viewer');
-    const account = accountContext(engine, ctx, id);
-    const port = engine.adapters.get(account.provider)?.drafts;
-    if (!port) throw new ForbiddenError('this provider does not support mailbox drafts');
-    return { port, context: account.context };
-  };
-  app.get('/v1/accounts/:id/drafts', async (c) => { const { port, context } = drafts(auth(c), c.req.param('id')); return c.json({ drafts: await port.list(context) }); });
-  app.get('/v1/accounts/:id/drafts/:draftId', async (c) => { const { port, context } = drafts(auth(c), c.req.param('id')); return c.json(await port.get(context, c.req.param('draftId'))); });
-  app.post('/v1/accounts/:id/drafts', async (c) => {
-    const ctx = auth(c); const { port, context } = drafts(ctx, c.req.param('id'), true);
-    const input = mail.parse(await c.req.json()) as EmailContent & { id?: string };
-    if (input.from.address.toLowerCase() !== context.account.sender.address.toLowerCase()) throw new ForbiddenError('draft sender must match connected account');
-    const saved = await port.save(context, input);
-    audit(engine.db, ctx, engine.now(), 'mail_draft', saved.id, 'saved', { accountId: context.account.id });
-    return c.json(saved);
-  });
-  app.delete('/v1/accounts/:id/drafts/:draftId', async (c) => {
-    const ctx = auth(c); const { port, context } = drafts(ctx, c.req.param('id'), true);
-    await port.delete(context, c.req.param('draftId'));
-    audit(engine.db, ctx, engine.now(), 'mail_draft', c.req.param('draftId'), 'deleted', { accountId: context.account.id });
-    return c.json({ deleted: true });
   });
 }

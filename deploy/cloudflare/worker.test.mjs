@@ -59,6 +59,17 @@ test('JWT validation rejects wrong audience, expiry, nonce and tampering; MCP re
   assert.equal(response.status, 200); const claim = JSON.parse(Buffer.from(calls[0].headers.get('x-carl-delegation'), 'base64url')); assert.equal(claim.surface, 'mcp'); assert.deepEqual(claim.scopes, ['carl:read', 'carl:prepare']);
 });
 const awaitTokenPlaceholder = 'invalid.jwt';
+test('private browser views require an owned connection and focus it before minting a short-lived link',async()=>{
+ const id='01ARZ3NDEKTSV4RRFFQ69G5FAV';const calls=[];const worker=createWorker({fetchImpl:async(url,options)=>{calls.push({url:String(url),options});if(String(url).endsWith('/preview-url'))return Response.json({url:env.DAYTONA_API_URL,token:'fixture-preview'});if(String(url).includes('/v1/me'))return Response.json({roles:['admin']});if(String(url).includes('/v1/social/connections/'))return Response.json({status:'awaiting_login',desktopPath:'websockify?token='+'a'.repeat(64)});if(String(url).includes('/signed-preview-url'))return Response.json({url:'https://private-view.example.invalid/?signature=fixture'});throw new Error('Unexpected fixture request');}});
+ const settings={...env,DAYTONA_API_KEY:'fixture-daytona',DAYTONA_SANDBOX_ID:'fixture-sandbox'};const headers={cookie:await cookieFor()};
+ assert.equal((await worker.fetch(new Request('https://carl.test/browser-login',{headers}),settings)).status,400);
+ const opened=await worker.fetch(new Request('https://carl.test/browser-login?session='+id,{headers}),settings);assert.equal(opened.status,302);assert.match(opened.headers.get('location'),/^https:\/\/private-view\.example\.invalid\/vnc\.html\?/);assert.equal(opened.headers.get('referrer-policy'),'no-referrer');
+ const focus=calls.findIndex(call=>call.url.endsWith('/v1/social/connections/'+id+'/open'));const minted=calls.findIndex(call=>call.url.includes('/signed-preview-url'));assert.ok(focus>=0&&minted>focus);assert.equal(calls[focus].options.method,'POST');assert.match(calls[minted].url,/expiresInSeconds=900/);
+ const denied=createWorker({fetchImpl:async()=>Response.json({roles:['operator']})});assert.equal((await denied.fetch(new Request('https://carl.test/browser-login?session='+id,{headers}),env)).status,403);
+});
+test('mailbox consent callbacks retain authenticated delegation and never echo codes or unapproved query fields',async()=>{
+ const calls=[];const worker=createWorker({fetchImpl:async(url,options)=>{calls.push({url:String(url),options});return Response.json({sessionId:'fixture',status:'select_mailbox'});}});const response=await worker.fetch(new Request('https://carl.test/auth/mailbox/zoho/callback?code=fixture-code&state=fixture-state&access_token=ignored',{headers:{cookie:await cookieFor()}}),env);assert.equal(response.status,200);assert.doesNotMatch(await response.text(),/fixture-code|access_token/);assert.match(calls[0].url,/\/v1\/mailboxes\/oauth\/zoho\/callback\?code=fixture-code&state=fixture-state$/);assert.equal(calls[0].options.method,'GET');assert.ok(calls[0].options.headers.get('x-carl-delegation'));
+});
 test('PKCE sign-in state is encrypted, same-browser bound, and expired callbacks recover without leaking tokens', async () => {
   const response = await beginLogin(new Request('https://carl.test/auth/login?returnTo=https://evil.test'), env);
   const redirect = new URL(response.headers.get('location')); assert.equal(redirect.searchParams.get('prompt'), 'select_account'); assert.equal(redirect.searchParams.get('code_challenge_method'), 'S256');

@@ -22,6 +22,9 @@ export const EXECUTION_PLACEMENTS = ['daytona-browser'] as const;
 export type ExecutionPlacement = (typeof EXECUTION_PLACEMENTS)[number];
 
 export interface CapabilitySnapshot {
+  /** Native composer observations for this exact publishing target, not generic platform support. */
+  readonly requiresPublishingQualification?: boolean;
+  readonly publishingQualification?: PublishingQualification;
   readonly provider: string;
   readonly send: boolean;
   readonly replyInThread: boolean;
@@ -45,6 +48,14 @@ export interface CapabilitySnapshot {
   readonly browserRecipeHashes?: Readonly<Record<string, string>>;
   /** Required `daytona-browser` when any social capability is true (ADR 0006). */
   readonly executionPlacement?: ExecutionPlacement;
+}
+
+export interface PublishingQualification {
+ readonly identity:string;
+ readonly accountType:'personal'|'organization'|'business'|'creator'|'unknown';
+ readonly formats:readonly ('feed'|'carousel'|'video'|'reel')[];
+ readonly checkedAt:number;
+ readonly detail?:string;
 }
 
 export function isProviderPurpose(value: unknown): value is ProviderPurpose {

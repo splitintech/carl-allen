@@ -52,6 +52,33 @@
       "credentialScope": "user",
       "clientAccess": "server",
       "optional": true
+    },
+    {
+      "name": "OUTREACH_DAYTONA_API_KEY",
+      "service": "outreach-engine",
+      "category": "other",
+      "description": "Optional server-owned Daytona key used only to renew private browser access.",
+      "credentialScope": "user",
+      "clientAccess": "server",
+      "optional": true
+    },
+    {
+      "name": "OUTREACH_DAYTONA_REFRESH_PYTHON",
+      "service": "outreach-engine",
+      "category": "other",
+      "description": "Optional trusted Python executable with the Daytona SDK for local signed-view renewal.",
+      "credentialScope": "user",
+      "clientAccess": "server",
+      "optional": true
+    },
+    {
+      "name": "OUTREACH_DAYTONA_CLI_AUTH",
+      "service": "outreach-engine",
+      "category": "other",
+      "description": "Set to 1 to explicitly reuse the server owner's selected Daytona CLI login during renewal.",
+      "credentialScope": "user",
+      "clientAccess": "server",
+      "optional": true
     }
   ],
   "platform": [

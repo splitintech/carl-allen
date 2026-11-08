@@ -6,6 +6,7 @@ import { ConflictError, ForbiddenError, registerProviderAccount, requireRole, ty
 /** Admin-supplied identity is persisted separately from secrets and cannot rebind an existing profile. */
 export async function registerConfiguredAccount(engine: Engine, ctx: AuthContext, input: RegisterAccountInput & { profileUrl?: string }): Promise<string> {
   requireRole(ctx, 'admin');
+  assertBindingOwner(engine,ctx,input.externalAccountId);
   if(input.publishingProfileUrl || input.profileUrl && /^\/company\//.test(new URL(input.profileUrl).pathname))return registerCompanyAccount(engine,ctx,input);
   let accountInput = input;
   if (input.executionPlacement === 'daytona-browser') {
@@ -23,6 +24,7 @@ export async function registerConfiguredAccount(engine: Engine, ctx: AuthContext
     }
     const profile = canonicalProfile(input.profileUrl);
     const expectedProfileUrl = profile.url;
+    assertBindingOwner(engine,ctx,expectedProfileUrl);
     mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
     const lock = `${file}.lock`;
     let descriptor: number;
@@ -38,6 +40,8 @@ export async function registerConfiguredAccount(engine: Engine, ctx: AuthContext
       if (identities.length > 1) throw new ConflictError('Duplicate historical profiles require administrator reconciliation');
       // Reuse historical arbitrary keys, but every newly created identity uses one canonical key.
       const externalAccountId = identities[0]?.[0] ?? expectedProfileUrl;
+      assertBindingOwner(engine,ctx,externalAccountId);
+      const owned=bindings[externalAccountId] as {workspaceId?:string}|undefined;if(owned?.workspaceId&&owned.workspaceId!==ctx.workspaceId)throw new ForbiddenError('Browser profile belongs to another workspace');
       accountInput = { ...input, externalAccountId };
       const existing = bindings[externalAccountId];
       if (!existing) {
@@ -82,6 +86,7 @@ async function registerCompanyAccount(engine:Engine,ctx:AuthContext,input:Regist
  const page=new URL(input.publishingProfileUrl??input.profileUrl??'');
  if(page.protocol!=='https:'||page.port||!['www.linkedin.com','linkedin.com'].includes(page.hostname)||!/^\/company\/[a-z0-9_-]+\/?$/i.test(page.pathname)||page.search||page.hash||page.username||page.password)throw new ConflictError('Use a canonical LinkedIn company page URL');
  const url=`https://www.linkedin.com${page.pathname.toLowerCase().replace(/\/?$/,'/')}`;
+ assertBindingOwner(engine,ctx,url);
  const owner=engine.db.prepare('SELECT id,provider,external_account_id FROM provider_accounts WHERE workspace_id=? AND id=?').get<{id:string;provider:string;external_account_id:string}>(ctx.workspaceId,input.loginConnectionId);
  if(!owner||owner.provider!==input.provider)throw new ForbiddenError('Login connection is not available in this workspace');
  const file=process.env.OUTREACH_SOCIAL_ACCOUNT_BINDINGS_FILE??process.env.OUTREACH_SOCIAL_BINDINGS_FILE;
@@ -101,3 +106,4 @@ async function registerCompanyAccount(engine:Engine,ctx:AuthContext,input:Regist
  engine.db.prepare('INSERT INTO publishing_targets(id,workspace_id,connection_id,account_id,channel,actor_kind,actor_url) VALUES (?,?,?,?,?,?,?) ON CONFLICT(workspace_id,account_id) DO NOTHING').run(id,ctx.workspaceId,owner.id,id,'linkedin','organization',url);
  return id;
 }
+function assertBindingOwner(engine:Engine,ctx:AuthContext,key:string){if(engine.db.prepare('SELECT id FROM provider_accounts WHERE external_account_id=? AND workspace_id<>?').get(key,ctx.workspaceId))throw new ForbiddenError('Browser identity belongs to another workspace');}

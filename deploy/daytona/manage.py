@@ -214,6 +214,8 @@ def cli(argv: list[str] | None = None) -> int:
     parser.add_argument('--disk', type=int, default=10, help='Snapshot disk in GB (account quota applies)')
     parser.add_argument('--cli-auth', action='store_true', help='Explicitly reuse the currently selected owner-only Daytona CLI login')
     args = parser.parse_args(argv)
+    if args.command == 'login-link':
+        parser.error('Open Carl-Allen Settings > Accounts and select Connect or Reconnect. Private browser access now requires an authenticated, account-specific human session; a shared desktop link cannot sign in.')
     if args.command == 'build':
         if not args.snapshot:
             parser.error('--snapshot is required')
@@ -235,14 +237,6 @@ def cli(argv: list[str] | None = None) -> int:
         result = sandbox.process.exec('node deploy/daytona/healthcheck.mjs', cwd='/opt/outreach', timeout=10)
         print(result.result)
         return 0 if result.exit_code == 0 else 1
-    if args.command == 'login-link':
-        # Browser access requires an explicit local action; avoid putting this signed credential into logs.
-        import webbrowser
-        refreshed = refresh_connection(sandbox, state)
-        private_write(args.state, refreshed)
-        webbrowser.open(refreshed['liveViewUrl'])
-        print(json.dumps({'opened': True, 'sandboxId': sandbox.id}))
-        return 0
     if args.interval < 30 or args.interval > 1800:
         parser.error('--interval must be 30..1800 seconds')
     while True:

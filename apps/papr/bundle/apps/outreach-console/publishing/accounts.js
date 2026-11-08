@@ -1,12 +1,8 @@
-/* global URL */
 import { canonicalProfile } from './identity.js';
 import { el, button, modal, field, busy, notify, badge } from './utils.js';
 import { PLATFORMS, platform, accountsFor, accountName } from './model.js';
 import { api } from './service.js';
-export function loginLink(url) {
-  if(!['localhost','127.0.0.1'].includes(globalThis.location?.hostname)) return button('Open private browser login',()=>{globalThis.open('/browser-login','_blank','noopener,noreferrer');},'small');
-  try { const value = new URL(url); if (value.protocol !== 'https:' || value.username || value.password) return null; return el('a', { href: value.href, class: 'button small', target: '_blank', rel: 'noopener noreferrer', text: 'Open private browser login' }); } catch { return null; }
-}
+import {socialConnect} from './social-connect.js';
 export function connectPlatform(channel, data, refresh) {
   const p = platform(channel); const m = modal(`Connect ${p.name}`, 'Sign in once in Daytona. Your own computer’s browser session is never copied.', true);
   const form = el('form', { class: 'account-form' }); const identity = el('input', { class: 'field-control', type: 'url', required: '', id: 'connection-profile', placeholder: channel === 'linkedin' ? 'https://www.linkedin.com/in/your-name/' : `https://www.${p.host}/${channel === 'tiktok' ? '@' : ''}your-name` });
@@ -23,7 +19,7 @@ export function connectPlatform(channel, data, refresh) {
     if (!result.accountId) throw new Error('The connection could not be confirmed. Refresh Accounts before trying again.');
     notice.textContent = 'Connection created. Open the private browser, sign in, then check your identity.';
     const check = button('Check session after login', () => busy(check, async () => { const status = await api('account-check', { accountId: result.accountId }); notice.textContent = status.status === 'ok' ? 'Your account identity is verified. You can now prepare posts for approval.' : `${status.status}: ${status.detail || 'Finish sign-in in the private browser, then check again.'}`; await refresh(); }), 'primary');
-    form.replaceChildren(el('h3', { text: 'Your browser connection is ready' }), (data.roles?.includes('admin')?loginLink(data.liveViewUrl):null) || el('p', { class: 'field-help', text: 'The private login link is not configured. Ask the runtime administrator to refresh it, then return to Accounts.' }), notice, check); await refresh();
+    form.replaceChildren(el('h3', { text: 'Your browser connection is ready' }), (data.roles?.includes('admin')?button('Open private administrator sign-in',()=>socialConnect(channel,refresh,{id:result.accountId,externalAccountId:profileUrl}),'primary'):null) || el('p', { class: 'field-help', text: 'The private login link is not configured. Ask the runtime administrator to refresh it, then return to Accounts.' }), notice, check); await refresh();
   }); });
   m.content.append(form); m.bottom.append(el('small', { text: 'Nothing is posted during account connection.' }), button('Finish later', m.close)); identity.focus();
 }
@@ -35,11 +31,18 @@ export function renderAccounts(data, refresh) {
     if (!accounts.length) card.append(badge('Not connected'), el('p', { text: 'Draft now, connect later. A verified browser identity is required before publishing.' }));
     for (const account of accounts) {
       const health = account.health || 'unknown'; const canOperate = data.roles?.some((role) => ['admin', 'operator', 'approver'].includes(role)); const check = button('Check connection', () => busy(check, async () => { const result = await api('account-check', { accountId: account.id }); notify(result.status === 'ok' ? `${p.name} account verified.` : `${p.name}: ${result.detail || result.status}`); await refresh(); }), 'small');
-      const reconnect = button('Reconnect', () => busy(reconnect, async () => { await api('account-reconnect', { accountId: account.id }); notify('Reconnect requested. Open private browser login, finish sign-in and check again.'); await refresh(); }), 'small');
+      const reconnect = button('Reconnect', () => socialConnect(p.id,refresh,account), 'small');
       check.disabled = !canOperate; reconnect.disabled = !canOperate;
-      card.append(el('strong', { style: 'font-size:12px', text: accountName(account) }), el('p', { text: account.externalAccountId }), badge(health === 'ok' ? 'Connected' : health), el('div', { class: 'toolbar-group' }, check, reconnect)); const login=data.roles?.includes('admin')?loginLink(data.liveViewUrl):null;if(login)card.append(login);
+      reconnect.disabled=!data.roles?.includes('admin');
+      const qualify=button('Verify publishing formats',()=>busy(qualify,async()=>{const result=await api('account-qualify',{accountId:account.id});notify(result.qualification.formats.length?'Verified: '+result.qualification.formats.join(', '):result.qualification.detail||'No native formats confirmed.');await refresh();}),'small');qualify.disabled=!canOperate||!!account.lifecycle;
+      const q=account.capabilities?.publishingQualification;
+      card.append(el('strong', { style: 'font-size:12px', text: accountName(account) }), el('p', { text: account.externalAccountId }), badge(account.lifecycle?.status||(health === 'ok' ? 'Connected' : health)), el('p',{class:'field-help',text:q?`${q.accountType} · ${q.formats.join(', ')||'Publishing needs verification'}`:'Native publishing formats have not been verified.'}),el('div', { class: 'toolbar-group' }, check, reconnect,qualify));
+      if(data.roles?.includes('admin'))card.append(button('Disconnect',()=>disconnect(account,refresh),'small danger'));
     }
-    const add = button(accounts.length ? 'Add another account' : `Connect ${p.name}`, () => connectPlatform(p.id, data, refresh), 'small'); add.disabled = !data.roles?.includes('admin'); card.append(add); cards.append(card);
+    const add = button(accounts.length ? 'Add another account' : `Connect ${p.name}`, () => socialConnect(p.id,refresh), 'small'); add.disabled = !data.roles?.includes('admin'); card.append(add);if(p.id==='linkedin'&&data.roles?.includes('admin'))card.append(button('Add company page',()=>connectPlatform(p.id,data,refresh),'small'));cards.append(card);
   }
-  root.append(cards, el('p', { class: 'inline-note', text: 'Native posting is validated for the selected account at queue and execution time. Platform challenges pause work for sign-in. LinkedIn personal accounts support messaging and connection requests. Verified Instagram browser messaging is separate from publishing. Native account restrictions remain enforced; X and TikTok messaging are not included.' })); return root;
+  root.append(cards, el('p', { class: 'inline-note', text: 'Native posting is validated for the selected account at queue and execution time. Platform challenges pause work for sign-in. LinkedIn personal accounts support messaging and connection requests. Verified Instagram browser messaging is separate from publishing. Native account restrictions remain enforced; X and TikTok messaging are not included.' }));
+  if(data.roles?.includes('admin')){const saved=el('div',{class:'stack','aria-live':'polite'});root.append(saved);void api('social-login-list').then(value=>{for(const session of value.sessions||[])saved.append(el('article',{class:'info-card'},el('h3',{text:`Continue ${platform(session.channel).name} sign-in`}),el('p',{class:'field-help',text:session.identity?.profileUrl||'Your private profile is saved. Resume to finish connecting.'}),button('Resume private sign-in',()=>socialConnect(session.channel,refresh,data.accounts.find(a=>a.id===session.accountId),session.id),'small')));}).catch(error=>{saved.replaceChildren(el('p',{class:'banner error',text:'Saved connections could not load: '+error.message}));});}
+  return root;
 }
+function disconnect(account,refresh){const m=modal('Disconnect account','Future work for this account will stop. Existing receipts and uncertain attempts remain available.',true);const reason=el('textarea',{class:'field-control',rows:3,maxlength:1000,required:true});const policy=el('select',{class:'field-control'},el('option',{value:'retain',text:'Keep private sign-in profile for reconnect'}),el('option',{value:'delete',text:'Remove sign-in profile when safe'}));const error=el('p',{role:'alert',class:'banner error',hidden:true});m.content.append(field('Reason',reason),field('Saved browser profile',policy),error);const confirm=button('Disconnect account',()=>busy(confirm,async()=>{if(!reason.value.trim()){error.hidden=false;error.textContent='Enter a reason.';reason.focus();return;}const result=await api('account-disconnect',{accountId:account.id,input:{reason:reason.value.trim(),profilePolicy:policy.value}});m.close();await refresh();notify(result.profile?.removed?'Account disconnected; profile removed.':'Account disconnected. '+(result.profile?.detail||'Profile retained according to your selection.'));}),'danger');m.bottom.append(button('Keep account',m.close),confirm);}

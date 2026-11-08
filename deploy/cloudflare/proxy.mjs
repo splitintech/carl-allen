@@ -26,14 +26,15 @@ export async function delegateRequest(env, identity, method, path, body = new Ui
   const delegation = { identityProvider: identity.identityProvider || 'google', sub: identity.sub, workspaceId: identity.workspaceId, surface: identity.surface, scopes: identity.scopes, ...(identity.email ? { email: identity.email, emailVerified: identity.emailVerified === true } : {}), iat: now, exp: now + 45, jti: random(), method, path, bodySha256: await sha256(body) };
   const encoded = base64url(bytes(JSON.stringify(delegation)));
   const headers = new Headers({ 'content-type': 'application/json', 'x-daytona-preview-token': runtime.previewToken, 'x-carl-delegation': encoded, 'x-carl-signature': await hmac(env.CLOUD_GATEWAY_SECRET, encoded), accept: 'application/json, text/event-stream' });
-  const response = await fetchImpl(runtime.apiUrl + path, { method, headers, ...(body.length ? { body } : {}), redirect: 'manual', signal: AbortSignal.timeout(60000) });
+  const response = await fetchImpl(runtime.apiUrl + path, { method, headers, ...(body.length ? { body } : {}), redirect: 'manual', signal: AbortSignal.timeout(path.endsWith('/qualify')?240000:60000) });
   // Upstream credential-bearing headers and redirects never reach the client.
   const safe = new Headers({ 'content-type': response.headers.get('content-type') || 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
   if (response.headers.get('x-trace-id')) safe.set('x-trace-id', response.headers.get('x-trace-id'));
   return new Response(response.body, { status: response.status, headers: safe });
 }
 /** Admin-only short-lived browser view; never expose the sandbox-wide preview token. */
-export async function browserLogin(env, fetchImpl = fetch) {
+export async function browserLogin(env, fetchImpl = fetch,desktopPath) {
+  if(typeof desktopPath!=='string'||!/^websockify\?token=[a-f0-9]{64}$/.test(desktopPath))throw new Error('Session-bound browser view required');
   if (!env.DAYTONA_API_KEY || !env.DAYTONA_SANDBOX_ID) throw new Error('Cloud browser login requires a Daytona API key');
   const base=new URL(env.DAYTONA_API_BASE || 'https://app.daytona.io/api/');
   if(base.protocol!=='https:'||base.hostname!=='app.daytona.io')throw new Error('Invalid Daytona origin');
@@ -43,5 +44,6 @@ export async function browserLogin(env, fetchImpl = fetch) {
   const value=await response.json();const url=new URL(value.url);
   if(url.protocol!=='https:'||url.username||url.password||url.hash)throw new Error('Invalid browser view');
   url.pathname=url.pathname.replace(/\/$/,'')+'/vnc.html';url.searchParams.set('autoconnect','true');url.searchParams.set('resize','scale');
+  url.searchParams.set('path',desktopPath);
   return {url:url.href,expiresAt:Date.now()+900000};
 }

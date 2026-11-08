@@ -66,7 +66,7 @@ async function uploads(page: Page, files: readonly MediaAttachment[], channel: N
   }
   throw new Error('Not all media uploads were confirmed; publication was not attempted');
 }
-async function compose(page: Page, channel: Network, input: SocialPublishInput, files: readonly MediaAttachment[], options: NetworkOptions): Promise<string> {
+export async function compose(page: Page, channel: Network, input: SocialPublishInput, files: readonly MediaAttachment[], options: NetworkOptions): Promise<string> {
   if (channel === 'x') {
     await page.locator('[data-testid="tweetTextarea_0"]').first().fill(input.text);
     await uploads(page, files, channel, options);
@@ -166,7 +166,7 @@ export async function networkPublish(session: SocialSession, ctx: ProviderContex
   let channel: Network; let files: MediaAttachment[];
   try {
     const bound = accountChannel(binding); if (bound === 'linkedin') throw new Error('Wrong publishing driver'); channel = bound;
-    files = await loadMedia(ctx, input.mediaUrls ?? [], options.media); validate(channel, input, files);
+    files = await loadMedia(ctx, input.mediaUrls ?? [], options.media, input.channel); validate(channel, input, files);
   } catch (error) { return { kind: 'rejected', errorClass: 'unsupported', detail: (error as Error).message.slice(0, 300) }; }
   let crossed = false; let authenticated = false; let active: Page | undefined;
   try {

@@ -7,7 +7,7 @@ function outcome(action){const value=badge(action.state);if(action.state==='succ
 async function actionResult(action){
  const m=modal('Execution result','Native receipts and uncertain outcomes come from the execution record.');m.content.append(el('p',{class:'inline-note',text:'Loading result…'}));m.bottom.append(button('Close',m.close));
  try{const record=await api('action-details',{actionId:action.id});const area=el('div',{class:'review-content'},outcome({...action,state:record.state}),el('p',{text:action.title}),record.state_reason?el('p',{class:'field-help',text:record.state_reason}):null);
- for(const attempt of record.attempts||[])area.append(el('article',{class:'review-entry'},el('strong',{text:`Attempt ${attempt.attempt_no} · ${attempt.outcome}`}),el('p',{text:attempt.receipt?.providerMessageId?`Native identifier: ${attempt.receipt.providerMessageId}`:'No confirmed native receipt for this attempt.'}),attempt.finished_at?el('small',{text:dateText(attempt.finished_at)}):null));
+ for(const attempt of record.attempts||[])area.append(el('article',{class:'review-entry'},el('strong',{text:`Attempt ${attempt.attempt_no} · ${attempt.outcome}`}),attempt.error_detail?el('p',{class:'banner',text:attempt.error_detail}):null,el('p',{text:attempt.receipt?.providerMessageId?`Native identifier: ${attempt.receipt.providerMessageId}`:'No confirmed native receipt for this attempt.'}),attempt.finished_at?el('small',{text:dateText(attempt.finished_at)}):null));
  if(!record.attempts?.length)area.append(el('p',{text:'This action has no delivery attempt yet.'}));m.content.replaceChildren(area);
  }catch(error){m.content.replaceChildren(el('p',{class:'banner error',role:'alert',text:error.message}));}
 }

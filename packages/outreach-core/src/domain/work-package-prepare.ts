@@ -1,5 +1,5 @@
 import { configuredMediaStore } from './r2-storage';
-import { digestCanonical, ulid, type CapabilitySnapshot, type SenderIdentity, type WorkManifest, type WorkPackageIssue } from '@splitin/outreach-contracts';
+import { firstCommentIssues, digestCanonical, ulid, type CapabilitySnapshot, type SenderIdentity, type WorkManifest, type WorkPackageIssue } from '@splitin/outreach-contracts';
 import { actorOf, audit, ConflictError, requireRole, type AuthContext } from './auth';
 import type { DomainEnv } from './env';
 import { getWorkPackage, type WorkPackage } from './work-packages';
@@ -41,7 +41,7 @@ function resolvePackage(env:DomainEnv,ctx:AuthContext,p:WorkPackage):{manifest:W
   const mediaIds=post.media.map(id=>p.mediaMap[id]).filter((id):id is string=>Boolean(id));
   if(mediaIds.length!==post.media.length)issue(post.id,'Every attachment must be uploaded and mapped');
   if(p.accountMap[post.accountRef])for(const result of postIssues(env,ctx,{id:p.id,revision:p.revision,name:m.name,timezone:m.timezone,scheduledFor:post.scheduledFor,posts:[{channel:post.channel,format:post.format,accountId:p.accountMap[post.accountRef],text:post.text,mediaIds}],status:'draft',actionIds:[],blocked:[],createdAt:env.now(),updatedAt:env.now()}))issue(post.id,result.reason);
-  if(post.firstComment&&!['linkedin','instagram'].includes(post.channel))issue(post.id,'First comments are supported only on LinkedIn and Instagram');
+  for(const problem of firstCommentIssues(post.channel,post.firstComment))issue(post.id,problem);
   if(post.firstComment&&!env.adapters.get(env.db.prepare('SELECT provider FROM provider_accounts WHERE id=?').get<{provider:string}>(p.accountMap[post.accountRef]??'')?.provider??'')?.social?.comment)issue(post.id,'First comments are not available for this account');
  }
  for(const seq of m.outreachSequences){

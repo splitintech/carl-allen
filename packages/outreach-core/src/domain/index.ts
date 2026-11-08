@@ -37,5 +37,10 @@ export * from './publishing-durable';
 export * from './workspace-policy';
 export * from './reply-playbooks';
 export * from './workspace-management';
+export * from './inbox-coverage';
+export * from './inbox-replies';
 
 export * from './workspace-dashboard';
+
+export * from './account-lifecycle';
+export * from './publishing-preflight';

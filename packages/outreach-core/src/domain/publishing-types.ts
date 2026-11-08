@@ -1,10 +1,10 @@
-import { PUBLISHING_CAPABILITIES } from '@splitin/outreach-contracts';
+import { FIRST_COMMENT_LIMITS, VIDEO_WORKFLOW_LIMITS, PUBLISHING_CAPABILITIES } from '@splitin/outreach-contracts';
 import { z } from 'zod';
 export const PUBLISHING_CHANNELS = ['linkedin', 'x', 'instagram', 'tiktok'] as const;
 export const PUBLISHING_LIMITS = {
   chunkBytes: 65_536, imageBytes: 5 * 1024 * 1024, videoBytes: 100 * 1024 * 1024,
   workspaceBytes: 50 * 1024 * 1024 * 1024, supportedVideoMimes: ['video/mp4'],
-  platforms: PUBLISHING_CAPABILITIES,
+  platforms: PUBLISHING_CAPABILITIES, firstComments: FIRST_COMMENT_LIMITS, videoWorkflows: VIDEO_WORKFLOW_LIMITS,
 } as const;
 export const PublishingDraftInput = z.object({
   id: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/).optional(),

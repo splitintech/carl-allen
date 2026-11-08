@@ -2,6 +2,7 @@ import { socialComment } from './comments';
 import { readConversations } from './conversations';
 import { instagramMessage } from './instagram-message';
 import { withLoginConnection } from './pool';
+import { qualifyPublishing } from './publishing-qualification';
 import { digestCanonical } from '@splitin/outreach-contracts';
 import type { BrowserTaskInput, CapabilitySnapshot, ProviderAdapter, ProviderContext, ProviderPurpose, SendResult, SocialHealth } from '@splitin/outreach-contracts';
 import { linkedInConnect, linkedInConnectionStatus, linkedInHealth, linkedInMessage, linkedInPublish, type LinkedInOptions } from './linkedin';
@@ -76,6 +77,7 @@ export function socialBrowserAdapter(options: SocialBrowserAdapterOptions): Prov
     name, purposes,
     async close() { await Promise.all([...sessions.values()].map((entry) => entry.session.close())); sessions.clear(); },
     account: {
+      async qualifyPublishing(ctx,input) {const value=binding(ctx);const channel=accountChannel(value);return withLoginConnection(options.runtime,ctx,value,async()=>qualifyPublishing(await session(ctx,value),ctx,value,{...linkedin,origin:options.origin??PLATFORM_ORIGINS[channel]},input));},
       async discover(ctx): Promise<CapabilitySnapshot> {
         const account = binding(ctx);
         const channel = account.kind === 'browser' ? undefined : accountChannel(account);
@@ -85,6 +87,7 @@ export function socialBrowserAdapter(options: SocialBrowserAdapterOptions): Prov
           externalIdempotency: false, inboundWebhook: false, mailboxPolling: false,
           reconcileBySentSearch: false, maxRecipientsPerMessage: 1, discoveredAt: ctx.now(),
           socialPublish: Boolean(channel), socialMessage: (channel === 'linkedin' && !account.publishingProfileUrl) || channel === 'instagram', socialConnect: channel === 'linkedin' && !account.publishingProfileUrl, socialChannels: channel ? [channel] : [],
+          requiresPublishingQualification:options.runtime.kind==='daytona'&&Boolean(channel),
           socialMediaTypes: channel === 'tiktok' ? ['video'] : channel ? ['image', 'video'] : [],
           browserTasks: eligibleRecipes.length > 0, browserRecipeHashes: Object.fromEntries(eligibleRecipes.map(([id, recipe]) => [id, digestCanonical(recipe)])), executionPlacement: 'daytona-browser',
         };
@@ -92,9 +95,10 @@ export function socialBrowserAdapter(options: SocialBrowserAdapterOptions): Prov
       health,
     },
     social: {
-      publish: (ctx, input) => execute(ctx, (active, value) => {
+      publish: (ctx, input) => execute(ctx, async (active, value) => {
         if (value.kind === 'browser') return Promise.resolve({ kind: 'rejected', errorClass: 'unsupported', detail: 'Browser-only account has no native publishing capability' });
         const channel = accountChannel(value);
+        if(options.runtime.kind==='daytona') {const observed=await qualifyPublishing(active,ctx,value,{...linkedin,origin:PLATFORM_ORIGINS[channel]},channel==='instagram'&&['reel','video'].includes(input.format??'')?input:undefined);if(!observed.formats.includes(input.format??'feed'))return {kind:'rejected',errorClass:'unsupported',detail:observed.detail??'This format could not be confirmed for the selected publishing identity'};}
         return channel === 'linkedin' ? linkedInPublish(active, ctx, value, linkedin, input) : networkPublish(active, ctx, value, { ...linkedin, origin: options.origin ?? PLATFORM_ORIGINS[channel] }, input);
       }),
       message: (ctx, input) => execute(ctx,(active,value)=> {
@@ -130,3 +134,4 @@ export type { BrowserRecipe, RecipeStep } from './recipes';
 export type { MediaPolicy } from './media';
 
 export { canonicalSocialProfile, PLATFORM_ORIGINS } from './platforms';
+export { inspectSignedInPage, LOGIN_IDENTITY_SELECTORS, type BrowserLoginIdentity } from './login-inspection';

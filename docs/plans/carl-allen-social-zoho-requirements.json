@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-07",
+  "releaseComplete": false,
+  "scope": "All fourteen concrete social/mailbox audit gaps, including ordinary Zoho attachment editing and reviewed manual social replies.",
+  "baselineRevision": "9ed1b67fcf432fa6e86c66094d87b8d1134978e5",
+  "requirements": [
+    {
+      "auditItem": 1,
+      "requirement": "Browser-first social identity discovery and explicit confirmation",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-server/src/social-login.ts",
+        "packages/outreach-provider-social-browser/src/login-inspection.ts",
+        "apps/papr/bundle/apps/outreach-console/publishing/social-connect.js"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/social-login.test.ts",
+        "packages/outreach-provider-social-browser/src/login-qualification.test.ts",
+        "apps/papr/src/social-connect-ui.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 2,
+      "requirement": "Account-specific renewable human reservation and revocable private desktop",
+      "implementation": "implemented",
+      "source": [
+        "deploy/daytona/browser-pool.mjs",
+        "deploy/daytona/login-view.mjs",
+        "deploy/daytona/login-browser.mjs"
+      ],
+      "automatedEvidence": [
+        "deploy/daytona/browser-pool.test.mjs",
+        "deploy/daytona/login-view.test.mjs"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 3,
+      "requirement": "Automatic identity polling, resumable reconnect and signed-link renewal",
+      "implementation": "implemented",
+      "source": [
+        "apps/papr/bundle/apps/outreach-console/publishing/social-connect.js",
+        "apps/papr/bundle/apps/outreach-console/backend/private-browser.mjs",
+        "deploy/cloudflare/worker.mjs"
+      ],
+      "automatedEvidence": [
+        "apps/papr/src/social-connect-ui.test.ts",
+        "apps/papr/src/private-browser.test.ts",
+        "deploy/cloudflare/worker.test.mjs"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 4,
+      "requirement": "Disconnect holds future work; explicit private profile retention/deletion and grant removal",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/account-lifecycle.ts",
+        "packages/outreach-server/src/routes-account-lifecycle.ts",
+        "packages/outreach-server/src/routes-mailbox-oauth.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/account-lifecycle.test.ts",
+        "packages/outreach-server/src/social-login.test.ts",
+        "packages/outreach-server/src/mailbox-oauth.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 5,
+      "requirement": "Native per-target format/account-type/permission qualification before approval and execution",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-social-browser/src/publishing-qualification.ts",
+        "packages/outreach-core/src/domain/publishing-drafts.ts",
+        "packages/outreach-server/src/routes-social-login.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/login-qualification.test.ts",
+        "packages/outreach-core/src/domain/publishing-preflight.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 6,
+      "requirement": "Persisted inbox continuation/backfill, Instagram requests and truthful monitoring coverage",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-social-browser/src/conversations.ts",
+        "packages/outreach-provider-social-browser/src/conversation-scroll.ts",
+        "packages/outreach-core/src/domain/inbox-coverage.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/conversation-continuation.test.ts",
+        "packages/outreach-core/src/domain/inbox-coverage.test.ts",
+        "packages/outreach-server/src/mailbox-coverage.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 7,
+      "requirement": "Fair connection-acceptance polling across waiting sequences",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/connection-polling.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-core/src/domain/inbox-coverage.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 8,
+      "requirement": "Shared first-comment validation in schema/UI/approval/executor",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-contracts/src/publishing.ts",
+        "packages/outreach-provider-social-browser/src/comments.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-social-browser/src/first-comment-validation.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 9,
+      "requirement": "Private Gmail/Outlook/Zoho OAuth with state/PKCE, mailbox selection, refresh/reconnect/disconnect",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-server/src/routes-mailbox-oauth.ts",
+        "packages/outreach-server/src/mailbox-oauth-provider.ts",
+        "apps/papr/bundle/apps/outreach-console/publishing/mailbox-connect.js"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/mailbox-oauth.test.ts",
+        "apps/papr/src/mailbox-ui.test.ts",
+        "deploy/cloudflare/worker.test.mjs"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 10,
+      "requirement": "Canonical draft body edits replace original HTML when plain text changes",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-email-zoho/src/drafts.ts",
+        "apps/papr/bundle/apps/outreach-console/publishing/mailbox-editor.js"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-email-zoho/src/drafts-rich.test.ts",
+        "apps/papr/src/mailbox-ui.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 11,
+      "requirement": "Trusted regional Zoho navigation metadata and manual native send",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-server/src/routes-mailbox-drafts.ts",
+        "packages/outreach-provider-email-zoho/src/mailbox.ts",
+        "apps/papr/bundle/apps/outreach-console/publishing/mailbox.js"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/mailbox-draft-uploads.test.ts",
+        "apps/papr/src/mailbox-ui.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 12,
+      "requirement": "CC/BCC and ordinary attachments; resumable private uploads and cursor draft paging",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-provider-email-zoho/src/attachments.ts",
+        "packages/outreach-server/src/routes-mailbox-drafts.ts",
+        "apps/papr/bundle/apps/outreach-console/publishing/mailbox-attachments.js"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-provider-email-zoho/src/drafts-rich.test.ts",
+        "packages/outreach-server/src/mailbox-draft-uploads.test.ts",
+        "apps/papr/src/mailbox-ui.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 13,
+      "requirement": "Human social reply preparation with exact thread/recipient review and approval",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-core/src/domain/inbox-replies.ts",
+        "packages/outreach-server/src/routes-inbox-replies.ts",
+        "apps/papr/bundle/apps/outreach-console/publishing/inbox-replies.js"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-server/src/inbox-replies.test.ts",
+        "apps/papr/src/manual-inbox-reply.test.ts",
+        "packages/outreach-provider-social-browser/src/conversation-continuation.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    },
+    {
+      "auditItem": 14,
+      "requirement": "Immutable media ffprobe codec/duration/dimension preflight and visible errors",
+      "implementation": "implemented",
+      "source": [
+        "packages/outreach-contracts/src/media-probe.ts",
+        "packages/outreach-core/src/domain/publishing-preflight.ts"
+      ],
+      "automatedEvidence": [
+        "packages/outreach-contracts/src/media-probe.test.ts",
+        "packages/outreach-core/src/domain/publishing-preflight.test.ts"
+      ],
+      "providerAcceptance": "pending-designated-account-qualification"
+    }
+  ],
+  "externalGates": [
+    {
+      "gate": "Google sign-in client, invitation and mailbox OAuth client configuration",
+      "status": "pending",
+      "owner": "workspace-admin"
+    },
+    {
+      "gate": "Cloudflare Worker/R2/KV/custom-domain deployment",
+      "status": "pending",
+      "owner": "user"
+    },
+    {
+      "gate": "Real social/mailbox grants and account permissions",
+      "status": "pending",
+      "owner": "workspace-admin"
+    },
+    {
+      "gate": "Specifically approved live publications, messages, invitations and native receipts",
+      "status": "pending",
+      "owner": "approver"
+    },
+    {
+      "gate": "Papr and personal/team ChatGPT host acceptance",
+      "status": "pending",
+      "owner": "workspace-admin"
+    },
+    {
+      "gate": "Mac-off operational soak and production encrypted/profile restore drill",
+      "status": "pending",
+      "owner": "runtime-operator"
+    }
+  ],
+  "operationalEvidence": {
+    "git": "record exact delivered revisions in release/PR receipt",
+    "daytona": "pending source activation and migrations 0013 through 0015; deployment receipt is separate from source tests"
+  },
+  "limitations": [
+    "Unknown or incomplete native inbox coverage holds follow-ups. Multi-peer/group conversations require manual handling.",
+    "Inline-CID draft edits remain blocked to preserve embedded images; ordinary attachments are supported.",
+    "Provider UI controls and format availability require real-account qualification; unknown formats are blocked.",
+    "No automated Zoho sending, X/TikTok messaging, TikTok photo posts, LinkedIn company messaging, stories, polls, music, collaborators, native engagement analytics or cloud AI.",
+    "Media is validated, never silently transcoded."
+  ]
+}

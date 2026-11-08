@@ -4,6 +4,7 @@ import type { Page, Response } from 'playwright';
 import type { SocialSession } from './session';
 import { attachImages, attachVideo, loadMedia, mediaUploadTimeout, type MediaPolicy } from './media';
 import { canonicalProfile, type AccountBinding } from './runtime';
+import { verifyNativeThread } from './conversation-thread';
 
 export interface LinkedInOptions {
   readonly origin: string;
@@ -91,7 +92,7 @@ export async function linkedInPublish(session: SocialSession, ctx: ProviderConte
   if (input.channel !== 'linkedin') return rejected('unsupported social channel');
   let files: Awaited<ReturnType<typeof loadMedia>> = [];
   if (input.mediaUrls?.length) {
-    try { files = await loadMedia(ctx, input.mediaUrls, options.media); }
+    try { files = await loadMedia(ctx, input.mediaUrls, options.media, input.channel); }
     catch (error) { return rejected((error as Error).message); }
   }
   const formatIssues=publishingFormatIssues('linkedin',input.format,files.map(f=>f.mimeType));if(formatIssues.length)return rejected(formatIssues.join('; '));
@@ -117,14 +118,15 @@ export async function linkedInPublish(session: SocialSession, ctx: ProviderConte
 export async function linkedInMessage(session: SocialSession, ctx: ProviderContext, binding: AccountBinding, options: LinkedInOptions, input: SocialMessageInput): Promise<SendResult> {
   let url: string;
   try { url = target(input, options); } catch (error) { return rejected((error as Error).message); }
-  return effect(session, ctx, binding, options, async (page, boundary) => {
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
+  const result=await effect(session, ctx, binding, options, async (page, boundary) => {
+    await page.goto(input.threadId?`${options.origin}/messaging/thread/${encodeURIComponent(input.threadId)}/`:url, { waitUntil: 'domcontentloaded' });
     if (new URL(page.url()).origin !== options.origin) throw new Error('Target navigation left the configured social origin');
     if (/checkpoint|authwall|login|challenge/i.test(new URL(page.url()).pathname)) throw new Error('checkpoint before message');
-    await page.locator('button:has-text("Message"), a:has-text("Message")').first().click();
+    if(!input.threadId)await page.locator('button:has-text("Message"), a:has-text("Message")').first().click();
     const participant = page.locator(binding.messageRecipientSelector ?? '.msg-overlay-bubble-header a[href*="/in/"], .msg-thread__link-to-profile, .msg-thread__topcard a[href*="/in/"]').first();
     const participantHref = await participant.getAttribute('href', { timeout: timeout(options) });
-    if (!participantHref || canonicalProfile(participantHref) !== canonicalProfile(input.targetUrl)) throw new Error('Opened conversation recipient does not match the approved target');
+    if (!participantHref || canonicalProfile(new URL(participantHref,'https://www.linkedin.com').href) !== canonicalProfile(input.targetUrl)) throw new Error('Opened conversation recipient does not match the approved target');
+    if(input.threadId)await verifyNativeThread(page,input.threadId,{selector:binding.messageRecipientSelector??'.msg-overlay-bubble-header a[href*="/in/"], .msg-thread__link-to-profile, .msg-thread__topcard a[href*="/in/"]',peerUrl:canonicalProfile(input.targetUrl),ownerUrl:canonicalProfile(binding.loginProfileUrl??binding.expectedProfileUrl??'')});
     const selector = '.msg-s-event-listitem[data-event-urn], [data-message-id]';
     const attribute = ['data-event-urn', 'data-message-id'] as const;
     const before = await previousIds(page, selector, attribute);
@@ -133,6 +135,7 @@ export async function linkedInMessage(session: SocialSession, ctx: ProviderConte
     await page.locator('button.msg-form__send-button').first().click();
     return confirmedId(page, selector, input.text, attribute, options, before);
   });
+  return result.kind==='accepted'&&input.threadId?{...result,receipt:{...result.receipt,providerThreadId:input.threadId}}:result;
 }
 export function invitationReceiptId(value: unknown): string | undefined {
   if (!value || typeof value !== 'object') return undefined;

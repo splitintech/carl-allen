@@ -16,7 +16,8 @@ RUN npm ci \
  && npm run build \
  && node -e "if(Number(process.versions.node.split('.')[0])!==24)process.exit(1)" \
  && npx --no-install playwright install --with-deps chromium \
- && apt-get update && apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify fluxbox tini \
+ && apt-get update && apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify fluxbox tini ffmpeg \
+ && ffprobe -version >/dev/null \
  && rm -rf /var/lib/apt/lists/* \
  && cp deploy/daytona/outreach.config.mjs /opt/outreach/outreach.config.mjs \
  && chmod +x deploy/daytona/entrypoint.sh \

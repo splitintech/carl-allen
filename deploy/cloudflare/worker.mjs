@@ -1,4 +1,4 @@
-/* global Request, Response, Headers, crypto, TextEncoder, btoa */
+/* global Request, Response, Headers, crypto, TextEncoder, btoa,URLSearchParams */
 import { authConfig, beginLogin, finishLogin, webIdentity, mcpIdentity, logout } from './auth.mjs';
 import { boundedBody } from './crypto.mjs';
 import { delegateRequest, browserLogin } from './proxy.mjs';
@@ -33,15 +33,26 @@ export function createWorker({ fetchImpl = fetch } = {}) {
           if (url.pathname.startsWith('/api/')) return json({ error: 'sign_in_required', loginUrl: '/auth/login' }, 401);
           return new Response(null, { status: 302, headers: { location: '/auth/login?returnTo=' + encodeURIComponent(url.pathname + url.search), 'cache-control': 'no-store' } });
         }
-        if(url.pathname==='/browser-login'&&request.method==='GET'){const member=await delegateRequest(env,identity,'GET','/v1/me',undefined,fetchImpl);if(!member.ok||!(await member.json()).roles?.includes('admin'))return json({error:'admin_required'},403);const view=await browserLogin(env,fetchImpl);return new Response(null,{status:302,headers:{location:view.url,'cache-control':'no-store','referrer-policy':'no-referrer'}});}
+        if(url.pathname==='/browser-login'&&request.method==='GET'){
+          const member=await delegateRequest(env,identity,'GET','/v1/me',undefined,fetchImpl);if(!member.ok||!(await member.json()).roles?.includes('admin'))return json({error:'admin_required'},403);
+          const session=url.searchParams.get('session');if(!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(session||''))return json({error:'Select an account connection in Settings first'},400);
+          const opened=await delegateRequest(env,identity,'POST',`/v1/social/connections/${session}/open`,new TextEncoder().encode('{}'),fetchImpl);if(!opened.ok)return opened;
+          const sessionView=await opened.json();const view=await browserLogin(env,fetchImpl,sessionView.desktopPath);return new Response(null,{status:302,headers:{location:view.url,'cache-control':'no-store','referrer-policy':'no-referrer'}});
+        }
         if (url.pathname === '/auth/session') return json({ authenticated: true, csrf: identity.csrf, workspaceId: identity.workspaceId });
+        const mailboxCallback=/^\/auth\/mailbox\/(gmail|outlook|zoho)\/callback$/.exec(url.pathname);
+        if(mailboxCallback&&request.method==='GET'){
+          const query=new URLSearchParams([...url.searchParams].filter(([key])=>['code','state','error','location'].includes(key)));
+          const result=await delegateRequest(env,identity,'GET',`/v1/mailboxes/oauth/${mailboxCallback[1]}/callback?${query}`,undefined,fetchImpl);if(!result.ok)return result;
+          return new Response('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Mailbox connected · Carl-Allen</title><body style="background:#171717;color:#eee;font:18px system-ui;padding:10vh 8vw"><h1>Mailbox consent received</h1><p>Return to Carl-Allen to choose and confirm your mailbox.</p><a style="color:#ee7828" href="/?view=accounts">Return to Settings</a></body></html>',{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"}});
+        }
         if (url.pathname === '/auth/logout' && request.method === 'POST') { sameOrigin(request, env); if (request.headers.get('x-carl-csrf') !== identity.csrf) return json({ error: 'invalid_csrf' }, 403); return logout(request, env); }
         if (url.pathname.startsWith('/api/')) {
           if (unsafe(request.method)) {
             sameOrigin(request, env);
             if (request.headers.get('x-carl-csrf') !== identity.csrf) return json({ error: 'invalid_csrf' }, 403);
           }
-          if(url.pathname==='/api/v1/browser-login' && request.method==='POST'){const member=await delegateRequest(env,identity,'GET','/v1/me',undefined,fetchImpl);if(!member.ok)return json({error:'forbidden'},403);const data=await member.json();if(!data.roles?.includes('admin'))return json({error:'admin_required'},403);return json(await browserLogin(env,fetchImpl));}
+          if(url.pathname==='/api/v1/browser-login' && request.method==='POST'){const member=await delegateRequest(env,identity,'GET','/v1/me',undefined,fetchImpl);if(!member.ok)return json({error:'forbidden'},403);const data=await member.json();if(!data.roles?.includes('admin'))return json({error:'admin_required'},403);const body=await request.json();if(!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(body.sessionId||''))return json({error:'connection_session_required'},400);const opened=await delegateRequest(env,identity,'POST',`/v1/social/connections/${body.sessionId}/open`,new TextEncoder().encode('{}'),fetchImpl);if(!opened.ok)return opened;const sessionView=await opened.json();return json(await browserLogin(env,fetchImpl,sessionView.desktopPath));}
           if (url.pathname.startsWith('/api/media/')) return await mediaRoute(request, env, identity, fetchImpl);
           if (!url.pathname.startsWith('/api/v1/')) return json({ error: 'not_found' }, 404);
           const path = url.pathname.slice('/api'.length) + url.search;

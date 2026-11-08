@@ -25,6 +25,17 @@ export function createPublishingPreview({ handler = handle, standalone = false }
       if (![`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`].includes(host)) return send(response, 403, { error: 'Invalid local host' });
       const origin = `http://${host}`;
       const url = new URL(request.url, origin);
+      if(url.pathname==='/browser-login'&&request.method==='GET'){
+        const wrapped=await handler('social-login-view',{sessionId:url.searchParams.get('session')});if(wrapped?.ok===false)throw new Error('Private browser access could not be renewed');const result=wrapped?.data??wrapped;
+        const view=new URL(result.url);if(view.protocol!=='https:'||view.username||view.password)throw new Error('Invalid private browser link');
+        response.writeHead(302,{'location':view.href,'cache-control':'no-store','referrer-policy':'no-referrer'});return response.end();
+      }
+      const mailboxCallback=/^\/auth\/mailbox\/(gmail|outlook|zoho)\/callback$/.exec(url.pathname);
+      if(mailboxCallback&&request.method==='GET'){
+        try{const wrapped=await handler('mailbox-oauth-callback',{provider:mailboxCallback[1],query:Object.fromEntries([...url.searchParams].filter(([key])=>['code','state','error','location'].includes(key)))});if(wrapped?.ok===false)throw new Error('Mailbox consent failed');
+          response.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"});return response.end('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Mailbox connected · Carl-Allen</title><body style="background:#171717;color:#eee;font:18px system-ui;padding:10vh 8vw"><h1>Mailbox consent received</h1><p>Return to Carl-Allen to choose and confirm your mailbox.</p><a style="color:#ee7828" href="/?view=accounts">Return to Settings</a></body></html>');
+        }catch{return send(response,400,{error:'Mailbox connection failed or expired. Return to Settings and start again.'});}
+      }
       if (url.pathname.startsWith('/api/app/backend/')) {
         if (request.method !== 'POST') return send(response, 405, { error: 'POST required' });
         if (request.headers.origin !== origin || (request.headers['sec-fetch-site'] && request.headers['sec-fetch-site'] !== 'same-origin')) return send(response, 403, { error: 'Same-origin request required' });

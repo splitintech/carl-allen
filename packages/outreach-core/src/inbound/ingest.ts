@@ -1,3 +1,4 @@
+import {accountLifecycle} from '../domain/account-lifecycle';
 import { appendAudit, sha256Hex, ulid, type InboundMailEvent, type SqlDatabase } from '@splitin/outreach-contracts';
 import { loadAccount } from '../execution/actions-repo';
 import { providerContext } from '../execution/invoke';
@@ -52,7 +53,7 @@ export async function ingestWebhook(
 export async function pollMailbox(env: DomainEnv, providerAccountId: string): Promise<{ stored: number; duplicates: number }> {
   const account = loadAccount(env.db, providerAccountId);
   const adapter = account ? env.adapters.get(account.provider) : undefined;
-  if (!account || !adapter?.mailbox) return { stored: 0, duplicates: 0 };
+  if (!account || !adapter?.mailbox || accountLifecycle(env,account.workspace_id,account.id)) return { stored: 0, duplicates: 0 };
   const cursor = env.db.prepare('SELECT cursor FROM provider_cursors WHERE provider_account_id = ?').get<{ cursor: string | null }>(account.id);
   const result = await adapter.mailbox.readChanges(providerContext(env.exec, account, ulid(), AbortSignal.timeout(30_000)), cursor?.cursor ?? null);
   return env.db.transaction(() => {
@@ -71,12 +72,13 @@ export async function pollDueMailboxes(env: DomainEnv, intervalMs: number): Prom
   const now = env.now();
   const accounts = env.db
     .prepare(
-      `SELECT a.id, a.provider FROM provider_accounts a LEFT JOIN provider_cursors c ON c.provider_account_id = a.id
+      `SELECT a.id, a.provider, a.workspace_id FROM provider_accounts a LEFT JOIN provider_cursors c ON c.provider_account_id = a.id
        WHERE a.health IN ('ok','degraded') AND (c.updated_at IS NULL OR c.updated_at <= ?)`,
     )
-    .all<{ id: string; provider: string }>(now - intervalMs);
+    .all<{ id: string; provider: string; workspace_id:string }>(now - intervalMs);
   let stored = 0;
   for (const account of accounts) {
+    if(accountLifecycle(env,account.workspace_id,account.id))continue;
     if (!env.adapters.get(account.provider)?.mailbox) continue;
     try {
       stored += (await pollMailbox(env, account.id)).stored;

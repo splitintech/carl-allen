@@ -66,6 +66,7 @@ export class TokenError extends Error {
 export type AccountHealth = 'ok' | 'degraded' | 'unhealthy' | 'reauth_required';
 
 export interface AccountPort {
+  qualifyPublishing?(ctx:ProviderContext,input?:{readonly format?:'feed'|'carousel'|'video'|'reel';readonly mediaUrls?:readonly string[]}):Promise<import('./capabilities').PublishingQualification>;
   discover(ctx: ProviderContext): Promise<CapabilitySnapshot>;
   health(ctx: ProviderContext): Promise<{ status: AccountHealth; detail?: string }>;
 }
@@ -200,7 +201,9 @@ export interface ManualTaskProvider {
 
 export interface SocialCommentInput { readonly actionId: string; readonly idempotencyKey: string; readonly channel: string; readonly targetUrl: string; readonly text: string }
 export interface SocialConversation { readonly threadId: string; readonly peerUrl: string; readonly subject?: string; readonly messages: readonly { readonly id: string; readonly text: string; readonly inbound: boolean; readonly at: number }[]; readonly updatedAt: number }
-export interface ConversationInbox { listThreads(ctx: ProviderContext, cursor?: string): Promise<{ threads: readonly SocialConversation[]; nextCursor: string }> }
+export interface InboxCoverage { readonly complete: boolean; readonly folders?: readonly string[]; readonly reason?: string }
+export interface InboxPage { readonly threads: readonly SocialConversation[]; readonly nextCursor: string; readonly coverage?: InboxCoverage }
+export interface ConversationInbox { listThreads(ctx: ProviderContext, cursor?: string): Promise<InboxPage> }
 export interface SocialPublishInput {
   readonly format?: 'feed' | 'carousel' | 'video' | 'reel';
   readonly actionId: string;
@@ -216,6 +219,7 @@ export interface SocialMessageInput {
   readonly channel: string;
   readonly targetUrl: string;
   readonly text: string;
+  readonly threadId?: string;
 }
 
 export interface SocialConnectInput {
@@ -236,15 +240,36 @@ export interface BrowserTaskInput {
 export interface BrowserTaskPort {
   run(ctx: ProviderContext, input: BrowserTaskInput): Promise<SendResult>;
 }
+/** Draft-only metadata. Native upload references stay inside the trusted server boundary. */
+export interface MailDraftAttachment {
+  readonly id: string;
+  readonly name: string;
+  readonly size: number;
+  readonly mimeType?: string;
+  readonly inline?: boolean;
+  readonly contentId?: string;
+  readonly native?: Readonly<Record<string, string>>;
+}
+export interface MailDraftContent extends EmailContent {
+  readonly cc?: readonly EmailAddress[];
+  readonly bcc?: readonly EmailAddress[];
+  /** Explicit plaintext editing removes stale rich HTML. */
+  readonly bodyFormat?: 'plaintext' | 'html';
+  readonly attachments?: readonly MailDraftAttachment[];
+}
+export interface MailDraftPage { readonly drafts: readonly MailDraft[]; readonly nextCursor?: string }
 export interface MailDraft {
   readonly id: string;
-  readonly content: EmailContent;
+  readonly content: MailDraftContent;
   readonly updatedAt?: number;
 }
 export interface EmailDraftPort {
   list(ctx: ProviderContext): Promise<readonly MailDraft[]>;
   get(ctx: ProviderContext, id: string): Promise<MailDraft>;
-  save(ctx: ProviderContext, input: EmailContent & { readonly id?: string }): Promise<MailDraft>;
+  save(ctx: ProviderContext, input: MailDraftContent & { readonly id?: string }): Promise<MailDraft>;
+  listPage?(ctx: ProviderContext, input: { readonly cursor?: string; readonly limit?: number }): Promise<MailDraftPage>;
+  uploadAttachment?(ctx: ProviderContext, input: { readonly name: string; readonly mimeType: string; readonly bytes: Uint8Array }): Promise<MailDraftAttachment>;
+  mailboxInfo?(ctx: ProviderContext): Promise<{ readonly webUrl: string; readonly region?: string; readonly attachmentUpload: boolean }>;
   delete(ctx: ProviderContext, id: string): Promise<void>;
 }
 
@@ -261,7 +286,7 @@ export interface SocialHealth {
  */
 export interface SocialBrowserPort {
   comment?(ctx: ProviderContext, input: SocialCommentInput): Promise<SendResult>;
-  conversations?(ctx: ProviderContext, cursor?: string): Promise<{ threads: readonly SocialConversation[]; nextCursor: string }>;
+  conversations?(ctx: ProviderContext, cursor?: string): Promise<InboxPage>;
   connectionStatus?(ctx: ProviderContext, targetUrl: string): Promise<'connected' | 'pending' | 'none' | 'unknown'>;
   connect?(ctx: ProviderContext, input: SocialConnectInput): Promise<SendResult>;
   publish(ctx: ProviderContext, input: SocialPublishInput): Promise<SendResult>;

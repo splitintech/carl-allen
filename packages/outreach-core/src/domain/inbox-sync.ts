@@ -1,12 +1,15 @@
 import { CANCELLABLE_ACTION_STATES,digestCanonical,ulid,type SocialConversation } from '@splitin/outreach-contracts';
 import type { DomainEnv } from './env';
 import { providerContext } from '../execution/invoke';
-import { transitionAction,type Actor,loadAccount } from '../execution/actions-repo';
+import { transitionAction,type Actor } from '../execution/actions-repo';
 import { enqueueAction } from '../execution/enqueue';
 import type { ActionRow,AccountRow } from '../execution/types';
 import { attachPlanAction } from './cloud-plans';
 import { addSuppression,isSuppressed } from './suppressions';
 import { approvedReplyScope,type ReplyPlaybookRow } from './reply-playbook-scope';
+import { inboxCursorState, storeInboxPage } from './inbox-coverage';
+import { pollConnectionAcceptance } from './connection-polling';
+import { accountLifecycle } from './account-lifecycle';
 interface ThreadRow{id:string;contact_id:string|null;peer_url:string}
 const normalized=(v:string)=>v.replace(/^mailto:/i,'').replace(/\/$/,'').toLowerCase();
 const actor=(now:number):Actor=>({kind:'system',id:'inbox-sync',source:'worker',traceId:ulid(now)});
@@ -57,19 +60,12 @@ export function ingestConversation(env:DomainEnv,account:AccountRow,conversation
 }
 export async function pollSocialInboxes(env:DomainEnv):Promise<void>{
  const deadline=Date.now()+60000;const rows=env.db.prepare("SELECT p.* FROM provider_accounts p LEFT JOIN inbox_cursors c ON c.account_id=p.id WHERE p.health='ok' ORDER BY COALESCE(c.polled_at,0),p.id").all<AccountRow>();let polled=0;
- for(const account of rows){if(polled>=4||Date.now()>deadline)break;const adapter=env.adapters.get(account.provider);const caps=JSON.parse(account.capabilities) as {socialMessage?:boolean};const reader=adapter?.inbox?.listThreads??(caps.socialMessage?adapter?.social?.conversations:undefined);if(!reader)continue;
+ for(const account of rows){if(polled>=4||Date.now()>deadline)break;if(accountLifecycle(env,account.workspace_id,account.id))continue;const adapter=env.adapters.get(account.provider);const caps=JSON.parse(account.capabilities) as {socialMessage?:boolean};const reader=adapter?.inbox?.listThreads??(caps.socialMessage?adapter?.social?.conversations:undefined);if(!reader)continue;
   const cursor=env.db.prepare('SELECT cursor,polled_at FROM inbox_cursors WHERE account_id=?').get<{cursor:string|null;polled_at:number}>(account.id);if(cursor&&env.now()-cursor.polled_at<30000)continue;polled++;
-  try{const context=providerContext(env.exec,account,ulid(env.now()),AbortSignal.timeout(20000));const page=await reader(context,cursor?.cursor??undefined);
+  try{const context=providerContext(env.exec,account,ulid(env.now()),AbortSignal.timeout(20000));const page=await reader(context,inboxCursorState(cursor?.cursor).providerCursor||undefined);
    for(const thread of page.threads)ingestConversation(env,account,thread);
-   env.db.prepare('INSERT INTO inbox_cursors(account_id,cursor,polled_at,error) VALUES (?,?,?,NULL) ON CONFLICT(account_id) DO UPDATE SET cursor=excluded.cursor,polled_at=excluded.polled_at,error=NULL').run(account.id,page.nextCursor,env.now());
-  }catch{env.db.prepare('INSERT INTO inbox_cursors(account_id,polled_at,error) VALUES (?,0,?) ON CONFLICT(account_id) DO UPDATE SET error=excluded.error').run(account.id,'Inbox synchronization failed; check connection and permissions');}
+   storeInboxPage(env.db,account.id,page,env.now());
+  }catch{env.db.prepare('INSERT INTO inbox_cursors(account_id,polled_at,error) VALUES (?,?,?) ON CONFLICT(account_id) DO UPDATE SET polled_at=excluded.polled_at,error=excluded.error').run(account.id,env.now(),'Inbox synchronization failed; check connection and permissions');}
  }
- // Read-only connection acceptance status is recorded independently of invitation send receipts.
- for(const row of env.db.prepare("SELECT * FROM outreach_sequences WHERE state='active' ORDER BY updated_at LIMIT 20").all<{id:string;workspace_id:string;action_ids:string}>()){
-  const ids=JSON.parse(row.action_ids) as string[];for(const id of ids){const action=env.db.prepare("SELECT * FROM scheduled_actions WHERE id=? AND state='scheduled'").get<ActionRow>(id);if(!action)continue;const payload=JSON.parse(action.payload) as {_waitFor?:string;targetUrl?:string};if(payload._waitFor!=='connected'||!payload.targetUrl)break;
-   const cached=env.db.prepare("SELECT at FROM sequence_events WHERE sequence_id=? AND kind='connection_status' ORDER BY at DESC LIMIT 1").get<{at:number}>(row.id);if(cached&&env.now()-cached.at<60000)break;
-   const account=loadAccount(env.db,action.provider_account_id);const adapter=account&&env.adapters.get(account.provider);if(!account||!adapter?.social?.connectionStatus)break;
-   try{const state=await adapter.social.connectionStatus(providerContext(env.exec,account,ulid(env.now()),AbortSignal.timeout(15000)),payload.targetUrl);env.db.prepare('INSERT OR IGNORE INTO sequence_events(id,sequence_id,kind,event_key,data,at) VALUES (?,?,?,?,?,?)').run(ulid(env.now()),row.id,'connection_status',`connection:${Math.floor(env.now()/60000)}`,JSON.stringify({state}),env.now());}catch{/* Missing/stale status keeps the condition waiting. */}break;
-  }
- }
+ await pollConnectionAcceptance(env,deadline);
 }

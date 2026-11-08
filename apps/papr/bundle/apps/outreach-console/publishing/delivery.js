@@ -16,7 +16,7 @@ function outcome(value,title) {
     const receipt=attempt.receipt;const row=el('div',{},el('strong',{text:`Attempt ${attempt.attempt_no} · ${attempt.outcome}`}),el('small',{class:'field-help',text:attempt.finished_at?dateText(attempt.finished_at):'Attempt has no recorded completion'}));
     if(receipt?.providerMessageId){row.append(el('p',{text:`Native identifier: ${receipt.providerMessageId}`}));if(receipt.acceptedAt)row.append(el('small',{text:`Provider acceptance: ${dateText(receipt.acceptedAt)}`}));const link=nativeLink(receipt.raw?.url||receipt.providerMessageId);if(link)row.append(link);}
     else row.append(el('p',{class:'field-help',text:'No confirmed native receipt for this attempt.'}));
-    if(attempt.error_class)row.append(el('p',{class:'field-help',text:`Provider result: ${attempt.error_class}`}));result.append(row);
+    if(attempt.error_class)row.append(el('p',{class:'field-help',text:`Provider result: ${attempt.error_class}`}));if(attempt.error_detail)row.append(el('p',{class:'banner',text:attempt.error_detail}));result.append(row);
   }
   return result;
 }
@@ -34,8 +34,8 @@ export function renderInboxMonitoring(data) {
   if(data.errors?.['inbox-monitoring'])root.append(el('p',{class:'banner error',text:'Inbox monitoring status could not refresh. Any status below is from the last successful snapshot.'}));
   if(!data.inboxMonitoring?.length)root.append(el('p',{class:'field-help',text:'No inbox monitoring result is available. Follow-ups stay held until their account has a successful, recent inbox sync.'}));
   for(const monitor of data.inboxMonitoring||[]) {
-    const account=data.accounts.find(a=>a.id===monitor.accountId);const name=accountName(account);const status={fresh:'Monitoring current',stale:'Monitoring stale',error:'Inbox sync failed',never_polled:'Never polled',connection_issue:'Connection needs attention'}[monitor.status]||'Monitoring unavailable';
-    root.append(el('article',{class:'review-tile'},el('div',{class:'review-heading'},el('strong',{text:`${name} · ${monitor.channel}`}),el('span',{class:`badge ${monitor.held?'amber':''}`,text:status})),el('p',{class:'field-help',text:monitor.lastPolledAt?`Last successful inbox sync: ${dateText(monitor.lastPolledAt)}`:'No successful inbox sync has been recorded.'}),monitor.error?el('p',{class:'field-help',text:monitor.error}):null,el('p',{class:'field-help',text:monitor.held?`Automatic follow-ups and replies held: ${monitor.holdReason}`:'Inbox freshness is healthy. Approvals, reply conditions and account policies still apply.'})));
+    const account=data.accounts.find(a=>a.id===monitor.accountId);const name=accountName(account);const status={fresh:'Monitoring current',stale:'Monitoring stale',incomplete:'Inbox coverage incomplete',error:'Inbox sync failed',never_polled:'Never polled',connection_issue:'Connection needs attention'}[monitor.status]||'Monitoring unavailable';
+    root.append(el('article',{class:'review-tile'},el('div',{class:'review-heading'},el('strong',{text:`${name} · ${monitor.channel}`}),el('span',{class:`badge ${monitor.held?'amber':''}`,text:status})),el('p',{class:'field-help',text:monitor.lastPolledAt?`Last inbox read: ${dateText(monitor.lastPolledAt)}`:'No inbox read has been recorded.'}),monitor.lastCompleteAt?el('p',{class:'field-help',text:`Last complete coverage: ${dateText(monitor.lastCompleteAt)}`}):null,monitor.error?el('p',{class:'field-help',text:monitor.error}):null,el('p',{class:'field-help',text:monitor.held?`Automatic follow-ups and replies held: ${monitor.holdReason}`:'Inbox freshness is healthy. Approvals, reply conditions and account policies still apply.'})));
   }
   return root;
 }

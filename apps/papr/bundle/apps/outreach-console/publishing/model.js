@@ -4,7 +4,7 @@ export const PLATFORMS = [
   { id: 'instagram', name: 'Instagram', icon: '◎', cap: 2200, maxImages: 10, host: 'instagram.com', hint: 'Images or one video · caption optional' },
   { id: 'tiktok', name: 'TikTok', icon: '♪', cap: 2200, maxImages: 0, host: 'tiktok.com', hint: 'One video · caption optional' },
 ];
-export function applyCapabilities(limits) { for(const p of PLATFORMS) { const value=limits?.platforms?.[p.id]; if(value)Object.assign(p,{cap:value.text,maxImages:value.images,formats:value.formats}); } }
+export function applyCapabilities(limits) { for(const p of PLATFORMS) { const value=limits?.platforms?.[p.id]; if(value)Object.assign(p,{cap:value.text,maxImages:value.images,formats:value.formats});p.firstCommentCap=limits?.firstComments?.[p.id]??(p.id==='linkedin'?1000:2200); } }
 export const platform = (id) => PLATFORMS.find((p) => p.id === id) || PLATFORMS[0];
 export const channels = (a) => a.capabilities?.socialChannels || [];
 export function accountsFor(data, channel) { return (data.accounts || []).filter((a) => channels(a).includes(channel)); }
@@ -23,6 +23,9 @@ export function validatePost(post, media, accounts) {
   if (p.id === 'instagram' && !post.mediaIds.length) errors.push('Instagram requires an image or video.');
   if (p.id === 'tiktok' && (videos.length !== 1 || images.length)) errors.push('TikTok requires exactly one video. Photo posts are not supported by this browser workflow.');
   const account = accounts.find((a) => a.id === post.accountId);
+  if(post.firstComment!==undefined&&post.firstComment!==''&&(!post.firstComment.trim()||Array.from(post.firstComment).length>(p.firstCommentCap??(p.id==='linkedin'?1000:2200))))errors.push(`${p.name}: first comment requires 1–${p.firstCommentCap??(p.id==='linkedin'?1000:2200)} characters.`);
+  if(account?.lifecycle)errors.push('This account is disconnected. Reconnect and verify it before preparing work.');
+  if(account?.capabilities?.requiresPublishingQualification&&!account.capabilities.publishingQualification?.formats.includes(post.format||'feed'))errors.push('Verify this account’s native publishing format in Settings before submitting.');
   if (account && assets.some((a) => a && account.capabilities?.socialMediaTypes && !account.capabilities.socialMediaTypes.includes(a.mime.startsWith('video/') ? 'video' : 'image'))) errors.push(`${p.name}: connected account cannot publish this media type.`);
   return errors;
 }

@@ -816,6 +816,321 @@
         "OUTREACH_CONNECTION_FILE"
       ],
       "timeoutMs": 120000
+    },
+    "social-login-view": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE",
+        "OUTREACH_DAYTONA_API_KEY",
+        "OUTREACH_DAYTONA_REFRESH_PYTHON",
+        "OUTREACH_DAYTONA_CLI_AUTH"
+      ],
+      "timeoutMs": 120000
+    },
+    "mailbox-oauth-config": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "mailbox-oauth-start": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "mailbox-oauth-status": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "mailbox-oauth-complete": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "mailbox-disconnect": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "mailbox-info": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "draft-upload-start": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "draft-upload-status": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "draft-upload-chunk": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "draft-upload-complete": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "draft-upload-cancel": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "mailbox-oauth-callback": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "inbox-replies": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "inbox-reply-prepare": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-start": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-list": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-get": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-check": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-open": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-confirm": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-cancel": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-pause": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "social-login-resume": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
+    },
+    "account-qualify": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 300000
+    },
+    "account-disconnect": {
+      "handler": "outreach.mjs",
+      "runtime": "node",
+      "keys": [
+        "OUTREACH_API_URL",
+        "OUTREACH_API_TOKEN",
+        "OUTREACH_PREVIEW_TOKEN",
+        "OUTREACH_DAYTONA_LIVE_VIEW_URL",
+        "OUTREACH_CONNECTION_FILE"
+      ],
+      "timeoutMs": 120000
     }
   }
 }

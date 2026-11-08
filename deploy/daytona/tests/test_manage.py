@@ -90,6 +90,13 @@ class CertificateTrustTest(unittest.TestCase):
 
 
 class LifecycleTest(unittest.TestCase):
+    def test_legacy_shared_login_link_redirects_to_owned_session_before_sdk_access(self):
+        with patch.object(manage, 'sdk_client') as client, patch('sys.stderr'):
+            with self.assertRaises(SystemExit) as result:
+                manage.cli(['login-link'])
+        self.assertEqual(result.exception.code, 2)
+        client.assert_not_called()
+
     def test_build_uses_explicit_container_class_and_configurable_quota_sized_resources(self):
         command = manage.snapshot_build_command('reviewed-source')
         self.assertEqual(command[command.index('--disk') + 1], '10')

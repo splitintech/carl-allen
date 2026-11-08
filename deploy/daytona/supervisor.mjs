@@ -1,11 +1,13 @@
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, closeSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, closeSync,rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 import { BrowserPool } from './browser-pool.mjs';
+import { loginBrowser } from './login-browser.mjs';
+import {LoginView,terminateProcessGroup} from './login-view.mjs';
 import { readPrivateJson, profileSpec, assertLocalStorage, acquireRuntimeLock, ensureConsoleToken } from './runtime-files.mjs';
 
 const home = process.env.OUTREACH_HOME ?? '/data/outreach';
@@ -46,10 +48,11 @@ function consoleToken() {
 }
 function child(name, executable, args) {
   const descriptor = openSync(`${home}/${name}.log`, 'a', 0o600);
-  const processChild = spawn(executable, args, { env: process.env, stdio: ['ignore', descriptor, descriptor] });
+  const detached=name.startsWith('chrome-');
+  const processChild = spawn(executable, args, { detached, env: process.env, stdio: ['ignore', descriptor, descriptor] });
   closeSync(descriptor);
   const previous = children.get(name);
-  const item = { process: processChild, executable, args, failures: previous?.failures ?? 0, stopped: false };
+  const item = { process: processChild, executable, args, failures: previous?.failures ?? 0, stopped: false, detached };
   children.set(name, item);
   processChild.on('error', () => { lastError = `${name} startup failed`; });
   processChild.on('close', async () => {
@@ -82,7 +85,9 @@ function connectionBindings() {
   }
   return result;
 }
+const loginView=new LoginView({tokenFile:`${home}/live-view-tokens`,port:Number(process.env.OUTREACH_LIVE_VIEW_PORT??6080),logFile:`${home}/live-view.log`});
 const browserPool = new BrowserPool({
+  onHumanStart:()=>loginView.grant(),onHumanEnd:()=>loginView.revoke(),
   limit: Number(process.env.OUTREACH_MAX_ACTIVE_BROWSERS ?? '2'),
   alive(key) { const item = children.get(`chrome-${createHash('sha256').update(key).digest('hex').slice(0,24)}`); return Boolean(item && item.process.exitCode === null && !item.process.killed); },
   async start(key, binding) {
@@ -96,39 +101,45 @@ const browserPool = new BrowserPool({
   },
   async stop(key) {
     const name = `chrome-${createHash('sha256').update(key).digest('hex').slice(0,24)}`; const item = children.get(name);
-    if (!item) return; item.stopped = true; item.process.kill('SIGTERM');
-    await Promise.race([new Promise(r => item.process.once('exit', r)), delay(5000)]);
-    if (item.process.exitCode === null) item.process.kill('SIGKILL'); children.delete(name);
+    if (!item) return; item.stopped = true;
+    await terminateProcessGroup(item.process);children.delete(name);
   },
 });
-async function syncBrowsers() { const configured=connectionBindings();for(const key of [...browserPool.profiles.keys()])if(!configured.has(key)&&!browserPool.busy(key)){await browserPool.stop(key);browserPool.profiles.delete(key);} }
+async function syncBrowsers() {await browserPool.prune([...connectionBindings().keys()]);}
 async function shutdown(code = 0) {
   if (stopping) return;
   stopping = true; ready = false;
   clearInterval(monitor);
+  await loginView.close().catch(()=>{lastError='Private desktop teardown failed';});
   const processes = [...children.values()];
   for (const item of processes) { item.stopped = true; item.process.kill('SIGTERM'); }
   await Promise.race([Promise.all(processes.map(({ process: p }) => new Promise(r => { if (p.exitCode !== null) r(); else p.once('exit', r); }))), delay(15_000)]);
-  for (const { process: p } of processes) if (p.exitCode === null) p.kill('SIGKILL');
+  for (const item of processes)if(item.detached)await terminateProcessGroup(item.process).catch(()=>undefined);else if(item.process.exitCode===null)item.process.kill('SIGKILL');
   statusServer.close(); process.exitCode = code;
 }
 process.once('SIGTERM', () => { void shutdown(); });
 process.once('SIGINT', () => { void shutdown(); });
 const statusServer = createServer(async (request, response) => {
   if (request.url === '/ready') {
-    response.writeHead(ready ? 200 : 503, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ ready, sandboxId: process.env.DAYTONA_SANDBOX_ID, lastError, services: [...children.keys()], browsers: browserPool.snapshot([...connectionBindings().keys()]) })); return;
+    const headers={'content-type':'application/json','cache-control':'no-store'};
+    try{const browsers=await browserPool.snapshot([...connectionBindings().keys()]);const healthy=ready&&loginView.healthy;response.writeHead(healthy?200:503,headers).end(JSON.stringify({ready:healthy,sandboxId:process.env.DAYTONA_SANDBOX_ID,lastError,services:[...children.keys(),'live-view'],browsers}));}catch{response.writeHead(503,headers).end(JSON.stringify({ready:false,lastError:'Private desktop teardown is pending'}));}return;
   }
-  if (!['/browser/acquire','/browser/renew','/browser/release'].includes(request.url) || request.method !== 'POST') { response.writeHead(404).end(); return; }
+  if(stopping){response.writeHead(503).end();return;}
+  if (!['/browser/acquire','/browser/renew','/browser/release','/browser/remove','/browser/login/focus','/browser/login/inspect'].includes(request.url) || request.method !== 'POST') { response.writeHead(404).end(); return; }
   if(request.headers.origin || request.headers.host !== '127.0.0.1:8788' || request.headers['content-type']?.split(';')[0] !== 'application/json'){response.writeHead(403).end();return;}
   try {
     let text = ''; for await (const chunk of request) { text += chunk; if (text.length > 4096) throw new Error('Request too large'); }
     const value = JSON.parse(text); let result = { ok: true };
     if (request.url === '/browser/acquire') {
       const binding = connectionBindings().get(value.connectionId); if (!binding) throw new Error('Unknown login connection');
-      result = await browserPool.acquire(value.connectionId, binding);
-    } else if (request.url === '/browser/renew') browserPool.renew(value.leaseId);
-    else browserPool.release(value.leaseId);
+      result = await browserPool.acquire(value.connectionId, binding,{human:value.human===true});
+    } else if(request.url==='/browser/remove'){
+      const bindings=readPrivateJson(bindingsFile,{});const entries=Object.entries(bindings).filter(([key,b])=>(b.connectionId||key)===value.connectionId);if(entries.length!==1)throw new Error('Shared or missing browser profile; retained');
+      const spec=profileSpec(value.connectionId,entries[0][1],profileRoot);await browserPool.remove(value.connectionId);rmSync(spec.directory,{recursive:true,force:true});result={removed:true};
+    } else if (request.url.startsWith('/browser/login/')) {
+      result=await browserPool.withHuman(value.leaseId,async({connectionId,desktopPath})=>{const binding=connectionBindings().get(connectionId);if(!binding)throw new Error('Login binding no longer exists');return{...await loginBrowser(binding,request.url.endsWith('/focus')?'focus':'inspect'),desktopPath};});
+    } else if (request.url === '/browser/renew') await browserPool.renew(value.leaseId);
+    else await browserPool.release(value.leaseId);
     response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result));
   } catch (error) { response.writeHead(409, { 'content-type': 'application/json' }).end(JSON.stringify({ error: String(error.message).slice(0,100) })); }
 });
@@ -144,8 +155,8 @@ const monitor = setInterval(async () => {
     await syncBrowsers();
     const token = consoleToken();
     await waitUrl(`http://127.0.0.1:${process.env.OUTREACH_PORT ?? '8787'}/v1/me`, 3_000, { authorization: `Bearer ${token.token}` });
-    for (const entry of browserPool.snapshot([...connectionBindings().keys()]).filter(v => v.state === 'active')) await waitUrl(`${connectionBindings().get(entry.connectionId).cdpUrl}/json/version`, 3_000);
-    ready = [...children.values()].every(v => v.process.exitCode === null && !v.process.killed);
+    for (const entry of (await browserPool.snapshot([...connectionBindings().keys()])).filter(v => v.state === 'active')) await waitUrl(`${connectionBindings().get(entry.connectionId).cdpUrl}/json/version`, 3_000);
+    ready = loginView.healthy&&[...children.values()].every(v => v.process.exitCode === null && !v.process.killed);
     lastError = null;
   } catch { ready = false; lastError = 'service readiness check failed'; }
   finally { checking = false; }
@@ -164,7 +175,7 @@ try {
   if (!existsSync(displaySocket)) throw new Error('Display failed to start');
   child('window-manager', 'fluxbox', []);
   child('vnc', 'x11vnc', ['-display', process.env.DISPLAY, '-localhost', '-forever', '-shared', '-nopw', '-rfbport', '5900']);
-  child('live-view', 'websockify', ['--web=/usr/share/novnc', process.env.OUTREACH_LIVE_VIEW_PORT ?? '6080', '127.0.0.1:5900']);
+  await loginView.start();
   await syncBrowsers();
   child('serve', process.execPath, [cli, ...baseArgs, 'serve', '--host', '0.0.0.0', '--port', process.env.OUTREACH_PORT ?? '8787', '--public']);
   child('worker', process.execPath, [cli, ...baseArgs, 'worker', '--loop', '--interval', '15s', '--backup-dir', resolve(home, 'backups'), '--backup-every-hours', process.env.OUTREACH_BACKUP_EVERY_HOURS ?? '24']);

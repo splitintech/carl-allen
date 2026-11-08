@@ -27,3 +27,7 @@ it('never serves backend source or traversed assets and refuses malformed reques
   expect((await fetch(base+'/api/app/backend/publishing-overview',{method:'POST',headers,body:JSON.stringify({appId:'outreach-console',params:{text:'x'.repeat(270000)}})})).status).toBe(413);
   expect(calls).toHaveLength(1);
 });
+it('unwraps trusted private browser responses and routes only fixed mailbox callbacks',async()=>{
+ const seen:unknown[]=[];const local=createPublishingPreview({handler:async(action:string,params:unknown)=>{seen.push({action,params});return{ok:true,data:{url:'https://private.example.invalid/vnc.html?signature=fixture'}};}});local.listen(0,'127.0.0.1');await once(local,'listening');const origin=`http://127.0.0.1:${(local.address() as AddressInfo).port}`;
+ try{const opened=await fetch(origin+'/browser-login?session=fixture',{redirect:'manual'});expect(opened.status).toBe(302);expect(opened.headers.get('location')).toBe('https://private.example.invalid/vnc.html?signature=fixture');expect(opened.headers.get('referrer-policy')).toBe('no-referrer');const callback=await fetch(origin+'/auth/mailbox/zoho/callback?state=fixture&code=one-use&token=ignored');expect(callback.status).toBe(200);expect(await callback.text()).not.toContain('one-use');expect(seen).toEqual([{action:'social-login-view',params:{sessionId:'fixture'}},{action:'mailbox-oauth-callback',params:{provider:'zoho',query:{state:'fixture',code:'one-use'}}}]);}finally{await new Promise<void>(resolve=>local.close(()=>resolve()));}
+});

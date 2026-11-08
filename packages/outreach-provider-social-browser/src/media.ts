@@ -1,4 +1,4 @@
-import type { ProviderContext } from '@splitin/outreach-contracts';
+import {probeVideoBytes,publishingVideoIssues,type ProviderContext} from '@splitin/outreach-contracts';
 import type { Page } from 'playwright';
 import { loadStoredMedia, type MediaAttachment } from './stored-media';
 export interface MediaPolicy {
@@ -71,10 +71,11 @@ export async function attachImages(page: Page, files: readonly ImageAttachment[]
 }
 
 /** Stored uploads may contain video; arbitrary remote video fetches are deliberately unsupported. */
-export async function loadMedia(ctx: ProviderContext, refs: readonly string[], policy?: MediaPolicy): Promise<MediaAttachment[]> {
+export async function loadMedia(ctx: ProviderContext, refs: readonly string[], policy?: MediaPolicy, channel='linkedin'): Promise<MediaAttachment[]> {
   if (refs.length > Math.min(policy?.maxFiles ?? 20, 20)) throw new Error('Media attachment limit exceeded');
   const files: MediaAttachment[] = [];
   for (const ref of refs) files.push(ref.startsWith('outreach-media:') ? await loadStoredMedia(ctx, ref, policy?.assetDirectory, policy?.stageStoredMedia) : (await loadImages(ctx, [ref], policy))[0]!);
+  for(const file of files)if(file.mimeType.startsWith('video/')){if(file.mimeType!=='video/mp4')throw new Error('Convert video to MP4 / H.264 before publishing.');const issues=publishingVideoIssues(channel,probeVideoBytes(file.buffer));if(issues.length)throw new Error(issues.join('; '));}
   return files;
 }
 export async function attachVideo(page: Page, file: MediaAttachment, timeoutMs: number): Promise<void> {

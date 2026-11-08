@@ -6,6 +6,7 @@ import type { DomainEnv } from './env';
 import { transitionAction } from '../execution/actions-repo';
 import type { ActionRow, PreflightVerdict } from '../execution/types';
 import { replyScopeIssue, type ReplyPlaybookRow } from './reply-playbook-scope';
+import { inboxReplyIssue } from './inbox-reply-scope';
 export const SCHEDULE_HORIZON_MS = 90 * 86400000;
 export const PUBLISHING_GRACE_MS = 3600000;
 export interface PlanAuthorization { id: string; workspace_id: string; subject_id: string; manifest_hash: string; valid_until: number; created_at: number }
@@ -61,7 +62,7 @@ export function assertPlanDecision(env:DomainEnv,ctx:AuthContext,id:string,hash:
  const book=env.db.prepare('SELECT * FROM reply_playbooks WHERE workspace_id=? AND authorization_id=?').get<ReplyPlaybookRow>(ctx.workspaceId,id);
  if((JSON.parse(approval.preview) as {summary?:{kind?:string}}).summary?.kind==='reply_playbook'){const issue=book?replyScopeIssue(env.db,book,env.now()):'reply_playbook_missing';if(issue)throw new ConflictError('Reply playbook changed; fresh review required: '+issue);}
  const rows=env.db.prepare('SELECT a.* FROM plan_actions p JOIN scheduled_actions a ON a.id=p.action_id WHERE p.authorization_id=?').all<ActionRow>(id);
- for(const a of rows){const item=env.db.prepare('SELECT * FROM plan_actions WHERE authorization_id=? AND action_id=?').get<FrozenAction>(id,a.id);if(a.state!=='awaiting_approval'||!item||!frozenMatches(item,a)||a.content_hash!==item.content_hash||digestCanonical(JSON.parse(a.payload))!==item.content_hash)throw new ConflictError('Plan actions changed; fresh review required');}
+ for(const a of rows){const item=env.db.prepare('SELECT * FROM plan_actions WHERE authorization_id=? AND action_id=?').get<FrozenAction>(id,a.id);if(a.state!=='awaiting_approval'||!item||!frozenMatches(item,a)||a.content_hash!==item.content_hash||digestCanonical(JSON.parse(a.payload))!==item.content_hash||inboxReplyIssue(env.db,a))throw new ConflictError('Plan actions changed; fresh review required');}
 }
 export function completePlanDecision(env:DomainEnv,id:string,approved:boolean):void {
  const p=env.db.prepare('SELECT subject_id FROM plan_authorizations WHERE id=?').get<{subject_id:string}>(id);

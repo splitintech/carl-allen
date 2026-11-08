@@ -37,6 +37,10 @@ describe('browser account registration binding',()=>{
    const trustedId=await registerConfiguredAccount(engine,ctx,{...input,externalAccountId:'trusted-browser',profileUrl:undefined});
    expect(trustedId).toBeTruthy();
    expect(JSON.parse(readFileSync(file,'utf8'))['trusted-browser'].kind).toBe('browser');
+   bootstrapWorkspace(db,{workspaceId:'foreign',name:'Foreign',adminRef:'foreign-admin',adminName:'Foreign'});const foreign=authenticate(db,'foreign','foreign-admin','test','foreign');const before=readFileSync(file,'utf8');
+   await expect(registerConfiguredAccount(engine,foreign, input)).rejects.toThrow('another workspace');
+   await expect(registerConfiguredAccount(engine,foreign,{...input,externalAccountId:'foreign-alias'})).rejects.toThrow('another workspace');
+   expect(readFileSync(file,'utf8')).toBe(before);
   } finally {db.close();if(old===undefined)delete process.env.OUTREACH_SOCIAL_ACCOUNT_BINDINGS_FILE;else process.env.OUTREACH_SOCIAL_ACCOUNT_BINDINGS_FILE=old;rmSync(directory,{recursive:true,force:true});}
  });
 });
