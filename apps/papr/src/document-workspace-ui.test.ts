@@ -14,10 +14,10 @@ const source = '<!doctype html><html><head><title>My campaign file</title><style
 interface Job {
   id: string; packageId: string; sourceHash: string; name: string; selectedActionIds: string[]; actions: HtmlImportAction[]; scheduledFor: string | null; timezone: string; status: string; revision: number; results: Record<string, unknown>[]; detail: string; createdAt: number; updatedAt: number;
 }
-async function fixture(page: Page, options: { delayDocument?: boolean; wrongHash?: boolean; failCreate?: boolean; blockFirstBridge?: boolean; legacyEmptyDraft?: boolean; savedPausedJob?: boolean } = {}) {
+async function fixture(page: Page, options: { delayDocument?: boolean; wrongHash?: boolean; failCreate?: boolean; blockFirstBridge?: boolean; blockReloadBridge?: boolean; legacyEmptyDraft?: boolean; savedPausedJob?: boolean } = {}) {
   const parsed = extractWorkPackage(source); const preview = buildHtmlDocumentPreview(source);
   const pack = { id: 'fixture-file', name: 'My campaign file', revision: 1, status: 'ready_for_review', manifest: parsed.manifest, extractedActions: parsed.actions, extractedTables: parsed.tables, issues: parsed.issues, accountMap: {}, mediaMap: {}, cloudReceipt: { stored: true, originalRemoteReady: true, executionReady: false, placement: 'daytona', sourceHash: parsed.sourceHash } };
-  const calls: { action: string; params: Record<string, unknown> }[] = []; const blocked: string[] = []; let jobs: Job[] = []; let failCreate = options.failCreate; let releaseDocument = () => {}; let blockFirstBridge = options.blockFirstBridge;
+  const calls: { action: string; params: Record<string, unknown> }[] = []; const blocked: string[] = []; let jobs: Job[] = []; let failCreate = options.failCreate; let releaseDocument = () => {}; let blockFirstBridge = options.blockFirstBridge; let documentLoads = 0;
   if (options.legacyEmptyDraft) jobs.push({ id: 'legacy-empty', packageId: pack.id, sourceHash: preview.sourceHash, name: 'Legacy empty draft', selectedActionIds: [], actions: [], scheduledFor: null, timezone: 'UTC', status: 'paused', revision: 1, results: [], detail: 'Previously saved without triggers.', createdAt: Date.now(), updatedAt: Date.now() });
   if (options.savedPausedJob) { const actions = preview.actions.filter((action) => action.kind !== 'unsupported').slice(0, 1); jobs.push({ id: 'saved-paused', packageId: pack.id, sourceHash: preview.sourceHash, name: 'Previously selected job', selectedActionIds: actions.map((action) => action.id), actions, scheduledFor: new Date(Date.now() + 86400000).toISOString(), timezone: 'UTC', status: 'paused', revision: 1, results: [], detail: 'Paused with a frozen selection.', createdAt: Date.now(), updatedAt: Date.now() }); }
   const documentReady = new Promise<void>((release) => { releaseDocument = release; });
@@ -26,7 +26,7 @@ async function fixture(page: Page, options: { delayDocument?: boolean; wrongHash
     if (url.pathname.startsWith('/api/')) {
       const { params } = route.request().postDataJSON() as { params: Record<string, unknown> }; const action = url.pathname.split('/').at(-1)!; calls.push({ action, params }); let value: unknown;
       if (action === 'work-package-import') { expect(params.html).toBe(source); value = { package: pack }; }
-      else if (action === 'work-package-document') { if (options.delayDocument) await documentReady; const html = blockFirstBridge ? preview.html.replaceAll('carl-allen-document-ready', 'blocked-document-ready') : preview.html; blockFirstBridge = false; value = { document: { ...preview, html, sourceHash: options.wrongHash ? 'b'.repeat(64) : preview.sourceHash, packageId: pack.id, name: pack.name } }; }
+      else if (action === 'work-package-document') { if (options.delayDocument) await documentReady; documentLoads++; const html = blockFirstBridge || options.blockReloadBridge && documentLoads > 1 ? preview.html.replaceAll('carl-allen-document-ready', 'blocked-document-ready') : preview.html; blockFirstBridge = false; value = { document: { ...preview, html, sourceHash: options.wrongHash ? 'b'.repeat(64) : preview.sourceHash, packageId: pack.id, name: pack.name } }; }
       else if (action === 'document-job-list') value = { jobs };
       else if (action === 'document-job-create') {
         if (failCreate) { failCreate = false; await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ stdout: JSON.stringify({ ok: false, error: 'Fixture job storage unavailable' }) }) }); return; }
@@ -103,6 +103,21 @@ it.skipIf(!enabled)('requires the trusted iframe readiness acknowledgement and o
     expect(f.calls.some((call) => call.action === 'document-job-create')).toBe(false); await page.getByRole('button', { name: 'Reload file', exact: true }).click();
     await page.getByText('Original file open inside Carl-Allen. Uploaded scripts and external resources remain inactive.', { exact: true }).waitFor(); expect(await page.getByRole('button', { name: 'Save job draft', exact: true }).isEnabled()).toBe(true); expect(await page.getByRole('button', { name: 'Schedule this job', exact: true }).isEnabled()).toBe(true);
     await page.getByRole('button', { name: 'Close file', exact: true }).click(); await page.clock.fastForward(12001); expect(await page.locator('dialog').count()).toBe(0); expect(f.calls.some((call) => call.action === 'document-job-create')).toBe(false);
+  } finally { await browser.close(); }
+}, 90000);
+it.skipIf(!enabled)('rejects a delayed readiness acknowledgement from the previous same-source iframe after reload', async () => {
+  const browser = await chromium.launch({ executablePath, headless: true });
+  try {
+    const page = await browser.newPage(); const f = await fixture(page, { blockReloadBridge: true, savedPausedJob: true }); await upload(page);
+    await page.getByText('Original file open inside Carl-Allen. Uploaded scripts and external resources remain inactive.', { exact: true }).waitFor();
+    await page.getByLabel('Include trigger Email contact').check(); expect(await page.getByRole('button', { name: 'Save job draft', exact: true }).isEnabled()).toBe(true);
+    await page.evaluate("globalThis.previousDocumentWindow=document.querySelector('iframe').contentWindow");
+    await page.getByRole('button', { name: 'Reload file', exact: true }).click();
+    const frame = page.frameLocator('iframe[title="Original document: My campaign file"]'); await frame.getByRole('heading', { name: 'Research notebook', exact: true }).waitFor();
+    expect(await page.evaluate("globalThis.previousDocumentWindow===document.querySelector('iframe').contentWindow")).toBe(false);
+    await page.evaluate(`dispatchEvent(new MessageEvent('message',{origin:'null',source:globalThis.previousDocumentWindow,data:{type:'carl-allen-document-ready',sourceHash:${JSON.stringify(f.preview.sourceHash)}}}))`);
+    expect(await page.getByRole('button', { name: 'Save job draft', exact: true }).isDisabled()).toBe(true); expect(await page.getByRole('button', { name: 'Schedule background job', exact: true }).isDisabled()).toBe(true); expect(await page.getByRole('button', { name: 'Schedule this job', exact: true }).isDisabled()).toBe(true);
+    expect(f.calls.some((call) => call.action === 'document-job-create' || call.action === 'document-job-update')).toBe(false);
   } finally { await browser.close(); }
 }, 90000);
 it.skipIf(!enabled)('keeps legacy empty frozen drafts unschedulable and requires a fresh selected-trigger job', async () => {

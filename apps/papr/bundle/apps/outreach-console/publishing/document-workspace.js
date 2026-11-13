@@ -12,7 +12,8 @@ export function showDocumentWorkspace(initialPack, data, refresh) {
   const loading = el('p', { class: 'field-help', role: 'status', 'aria-live': 'polite', text: 'Loading your uploaded document in the background…' });
   const sourceState = el('small', { class: 'field-help', text: receiptSummary(pack) });
   const transfer = el('p', { class: 'field-help', role: 'status', 'aria-live': 'polite', hidden: '' });
-  const frame = el('iframe', { class: 'document-preview-frame', title: `Original document: ${pack.name}`, sandbox: 'allow-scripts', referrerpolicy: 'no-referrer', hidden: '' });
+  const makeFrame = () => el('iframe', { class: 'document-preview-frame', title: `Original document: ${pack.name}`, sandbox: 'allow-scripts', referrerpolicy: 'no-referrer' });
+  let frame = makeFrame(); frame.hidden = true;
   const omissions = el('details', { class: 'document-preview-omissions', hidden: '' }, el('summary', { class: 'field-help', text: 'Preview changes' }));
   const preview = el('section', { class: 'document-preview-pane', 'aria-label': 'Original uploaded file' }, el('div', { class: 'document-preview-heading' }, el('div', {}, el('h3', { text: 'Your original file' }), sourceState), button('Reload file', () => loadDocument(), 'small')), loading, transfer, frame, el('p', { class: 'field-help', text: 'The file stays inside Carl-Allen. Select a highlighted link or a detected trigger beside it to inspect its behavior. This does not navigate away or send anything.' }), omissions);
   const summary = el('p', { class: 'field-help', role: 'status', 'aria-live': 'polite' });
@@ -68,7 +69,10 @@ export function showDocumentWorkspace(initialPack, data, refresh) {
         if (!active || generation !== requestGeneration || !awaitingReady) return;
         awaitingReady = false; ready = false; loading.className = 'validation-errors'; loading.textContent = 'The file preview did not initialize its trusted controls. Choose Reload file to retry. Scheduling remains unavailable.'; jobs.setReady(false, 'Reload the original file before saving or scheduling a job.');
       }, 12000);
-      frame.srcdoc = next.html; frame.hidden = false; loading.textContent = 'Opening your original file. Waiting for its controls to initialize…';
+      // A new browsing context avoids racing a previous blank srcdoc navigation
+      // and makes readiness messages belong to exactly one document load.
+      const nextFrame = makeFrame(); nextFrame.srcdoc = next.html;
+      frame.replaceWith(nextFrame); frame = nextFrame; loading.textContent = 'Opening your original file. Waiting for its controls to initialize…';
       omissions.replaceChildren(el('summary', { class: 'field-help', text: 'Preview changes' }), ...(next.omissions || []).map((omission) => el('p', { class: 'field-help', text: omission.message })));
       omissions.hidden = !next.omissions?.length; drawTriggers();
     } catch (error) { if (!active || generation !== requestGeneration) return; clearTimeout(readinessTimer); awaitingReady = false; ready = false; document = undefined; loading.className = 'validation-errors'; loading.textContent = `The original file could not open: ${error.message}`; jobs.setReady(false, 'Reload the original file before saving or scheduling a job.'); }
