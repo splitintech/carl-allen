@@ -6,6 +6,7 @@ import { parseNavigationScript, registerNavigationFunctions, invalidateNavigatio
 
 type Node = DefaultTreeAdapterMap['node'];
 type Element = DefaultTreeAdapterMap['element'];
+type SupportedAction = Exclude<HtmlImportAction, { kind: 'unsupported' }>;
 const LIMIT = 1000;
 const attr = (element: Element, name: string) => element.attrs.find((item) => item.name === name)?.value ?? '';
 const scriptText = (element: Element) => element.childNodes.map((child) => 'value' in child ? child.value : '').join('');
@@ -25,7 +26,7 @@ function elementsIn(root: Node): Element[] {
 }
 
 /** Inventory safe user-click actions. Unsupported behavior is visible and never evaluated. */
-export function extractHtmlActions(root: Node, issues: WorkPackageIssue[]): HtmlImportAction[] {
+export function extractHtmlActions(root: Node, issues: WorkPackageIssue[], onActionElement?: (element: Element, action: SupportedAction) => void): HtmlImportAction[] {
   const elements = elementsIn(root); const actions: HtmlImportAction[] = [];
   let omitted = 0; let analysedCharacters = 0;
   const functions: NavigationFunctions = new Map(); const scripts = new Map<Element, string>();
@@ -40,10 +41,13 @@ export function extractHtmlActions(root: Node, issues: WorkPackageIssue[]): Html
     if (actions.length >= LIMIT - 1) { omitted++; return; }
     actions.push({ id: `html-action-${actions.length + 1}`, kind: 'unsupported', label, source, reason });
   };
-  const navigation = (destination: string, label: string, source: string) => {
+  const navigation = (destination: string, label: string, source: string, element: Element) => {
     if (actions.length >= LIMIT - 1) { omitted++; return; }
-    try { actions.push({ id: `html-action-${actions.length + 1}`, label, source, ...htmlDestination(destination, base) }); }
-    catch (error) { unsupported(label, source, error instanceof Error ? error.message : 'Destination requires explicit mapping'); }
+    let resolved: ReturnType<typeof htmlDestination>;
+    try { resolved = htmlDestination(destination, base); }
+    catch (error) { unsupported(label, source, error instanceof Error ? error.message : 'Destination requires explicit mapping'); return; }
+    const action = { id: `html-action-${actions.length + 1}`, label, source, ...resolved };
+    actions.push(action); onActionElement?.(element, action);
   };
   for (const element of elements) {
     if (element.tagName !== 'script' || !executableScript(element) || attr(element, 'src')) continue;
@@ -60,17 +64,17 @@ export function extractHtmlActions(root: Node, issues: WorkPackageIssue[]): Html
       if (handler.name !== 'onclick') { unsupported(label, handler.name, 'This event requires explicit mapping; event code was not executed'); continue; }
       analysedCharacters += handler.value.length;
       const parsed = analysedCharacters <= 500_000 ? staticNavigation(handler.value, functions) : { reason: 'Document exceeds the static analysis limit' };
-      if (parsed.destination !== undefined) { navigation(parsed.destination, label, 'onclick'); clickNavigates = true; }
+      if (parsed.destination !== undefined) { navigation(parsed.destination, label, 'onclick', element); clickNavigates = true; }
       else unsupported(label, 'onclick', parsed.reason ?? 'This click handler requires explicit mapping');
     }
     if (['a', 'area'].includes(element.tagName) && element.attrs.some((item) => item.name === 'href')) {
       const href = attr(element, 'href');
-      if (!(clickNavigates && (!href || href.startsWith('#')))) navigation(href, labelFor(element, 'Open link'), 'anchor');
+      if (!(clickNavigates && (!href || href.startsWith('#')))) navigation(href, labelFor(element, 'Open link'), 'anchor', element);
     }
     if (element.tagName === 'meta' && attr(element, 'http-equiv').toLowerCase() === 'refresh') {
       const match = attr(element, 'content').match(/^\s*\d+(?:\.\d+)?\s*;\s*url\s*=\s*(.*?)\s*$/i);
       if (match?.[1]) {
-        const target = match[1].replace(/^(['"])(.*)\1$/, '$2'); navigation(target, 'Open redirect destination', 'meta_refresh');
+        const target = match[1].replace(/^(['"])(.*)\1$/, '$2'); navigation(target, 'Open redirect destination', 'meta_refresh', element);
       } else unsupported('Document refresh', 'meta_refresh', 'Refresh has no supported static URL destination');
     }
     if (element.tagName === 'form' || element.attrs.some((item) => item.name === 'formaction')) unsupported(labelFor(element, 'Form submission'), 'form', 'Forms need explicit field and submission mapping; no form was submitted');
@@ -80,7 +84,7 @@ export function extractHtmlActions(root: Node, issues: WorkPackageIssue[]): Html
     const code = scripts.get(element);
     if (code === undefined) { unsupported('Inline script', 'script', 'Document exceeds the static analysis limit'); continue; }
     const parsed = staticNavigation(code, functions, true);
-    if (parsed.destination !== undefined) navigation(parsed.destination, 'Open script redirect destination', 'script');
+    if (parsed.destination !== undefined) navigation(parsed.destination, 'Open script redirect destination', 'script', element);
     else if (parsed.reason) unsupported('Inline script', 'script', parsed.reason);
   }
   if (omitted) {

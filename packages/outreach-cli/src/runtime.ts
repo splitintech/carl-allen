@@ -3,6 +3,7 @@ import { homedir, userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ulid, type ManualTaskProvider, type ProviderAdapter, type SecretResolver, type SqlDatabase } from '@splitin/outreach-contracts';
+import { createDocumentJobRunner, type DocumentRuntimeOptions } from './document-runtime';
 import { authenticate, createEngine, type AuthContext, type Engine, type ExecutionConfig } from '@splitin/outreach-core';
 import { FAKE_EMAIL_SECRET, FakeEmailProvider, FakeNotifier, FakeSocialProvider } from '@splitin/outreach-fakes';
 import { openSqliteDatabase } from '@splitin/outreach-store-sqlite';
@@ -12,6 +13,7 @@ export interface OutreachConfig {
   readonly adapters: readonly ProviderAdapter[] | (() => readonly ProviderAdapter[] | Promise<readonly ProviderAdapter[]>);
   readonly manual?: ManualTaskProvider;
   readonly execution?: Partial<ExecutionConfig>;
+  readonly documentJobs?: DocumentRuntimeOptions;
 }
 
 export interface GlobalOptions {
@@ -77,7 +79,7 @@ export function principalRef(env: NodeJS.ProcessEnv = process.env): string {
   return env.OUTREACH_PRINCIPAL ?? `cli:${userInfo().username}`;
 }
 
-async function loadConfig(options: GlobalOptions): Promise<{ adapters: readonly ProviderAdapter[]; manual?: ManualTaskProvider; execution?: Partial<ExecutionConfig> }> {
+async function loadConfig(options: GlobalOptions): Promise<{ adapters: readonly ProviderAdapter[]; manual?: ManualTaskProvider; execution?: Partial<ExecutionConfig>; documentJobs?: DocumentRuntimeOptions }> {
   if (options.fake) {
     return {
       adapters: [new FakeEmailProvider().adapter(), new FakeNotifier().adapter(), new FakeSocialProvider({ secret: FAKE_EMAIL_SECRET }).adapter()],
@@ -91,7 +93,7 @@ async function loadConfig(options: GlobalOptions): Promise<{ adapters: readonly 
   const module = (await import(pathToFileURL(path).href)) as { default?: OutreachConfig };
   if (!module.default?.adapters) throw new UsageError(`${path} must default-export { adapters }`);
   const adapters = typeof module.default.adapters === 'function' ? await module.default.adapters() : module.default.adapters;
-  return { adapters, ...(module.default.manual ? { manual: module.default.manual } : {}), ...(module.default.execution ? { execution: module.default.execution } : {}) };
+  return { adapters, ...(module.default.manual ? { manual: module.default.manual } : {}), ...(module.default.execution ? { execution: module.default.execution } : {}), ...(module.default.documentJobs ? { documentJobs: module.default.documentJobs } : {}) };
 }
 
 export interface Runtime {
@@ -106,7 +108,7 @@ export interface Runtime {
 export async function openRuntime(options: GlobalOptions, env: NodeJS.ProcessEnv = process.env): Promise<Runtime> {
   const db = openSqliteDatabase(resolve(options.db));
   try {
-    const { adapters, manual, execution } = await loadConfig(options);
+    const { adapters, manual, execution, documentJobs } = await loadConfig(options);
     const baseUrl = env.OUTREACH_PUBLIC_URL;
     const secret = env.OUTREACH_UNSUBSCRIBE_SECRET;
     const engine = createEngine({
@@ -117,6 +119,7 @@ export async function openRuntime(options: GlobalOptions, env: NodeJS.ProcessEnv
       ...(baseUrl && secret ? { unsubscribe: { baseUrl: `${baseUrl.replace(/\/+$/, '')}/u/`, secret } } : {}),
       ...(manual ? { manual } : {}),
       ...(execution ? { execution } : {}),
+      ...(documentJobs?.enabled ? { documentJobRunner: createDocumentJobRunner(documentJobs) } : {}),
     });
     return {
       options,

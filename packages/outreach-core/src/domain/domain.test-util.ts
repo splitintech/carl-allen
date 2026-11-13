@@ -6,6 +6,7 @@ import {
   FakeSocialProvider,
   staticSecrets,
 } from '@splitin/outreach-fakes';
+import type { DocumentJobRunner } from '@splitin/outreach-contracts';
 import { openSqliteDatabase } from '@splitin/outreach-store-sqlite';
 import { DateTime } from 'luxon';
 import { bootstrapWorkspace, createEngine, type Engine } from '../engine';
@@ -56,7 +57,7 @@ spec:
     - { id: close, type: email.reply, template: close@1, when: no_reply }
 `;
 
-export async function makeDomainEnv(options: { sendGate?: SendGate; start?: number; unsubscribe?: UnsubscribeConfig } = {}): Promise<DomainTestEnv> {
+export async function makeDomainEnv(options: { sendGate?: SendGate; start?: number; unsubscribe?: UnsubscribeConfig; documentJobRunner?: DocumentJobRunner } = {}): Promise<DomainTestEnv> {
   const db = openSqliteDatabase(':memory:');
   const fake = new FakeEmailProvider();
   const notifier = new FakeNotifier();
@@ -77,6 +78,7 @@ export async function makeDomainEnv(options: { sendGate?: SendGate; start?: numb
     execution: { reconcileDelayMs: 0 },
     pollIntervalMs: 0,
     random: () => 0.5,
+    ...(options.documentJobRunner ? { documentJobRunner: options.documentJobRunner } : {}),
   });
   bootstrapWorkspace(db, { workspaceId: 'ws', name: 'Test', adminRef: 'test:admin', adminName: 'Admin' }, now);
   const admin = authenticate(db, 'ws', 'test:admin', 'test', 't-admin');

@@ -1,5 +1,5 @@
 import { pollSocialInboxes } from './domain/inbox-sync';
-import { ulid, type ManualTaskProvider, type ProviderAdapter, type SecretResolver, type SqlDatabase } from '@splitin/outreach-contracts';
+import { ulid, type DocumentJobRunner, type ManualTaskProvider, type ProviderAdapter, type SecretResolver, type SqlDatabase } from '@splitin/outreach-contracts';
 import { runExecutionPass, type ExecutionPassReport } from './execution/executor';
 import { setKillSwitch, type KillSwitchScope } from './execution/kill-switches';
 import { resolveReviewAction, type ReviewResolution } from './execution/review';
@@ -11,6 +11,7 @@ import { domainChecks, domainEffects, domainRatePolicy } from './domain/wiring';
 import { checkDueAccountHealth } from './domain/health';
 import { pollDueMailboxes } from './inbound/ingest';
 import { processInboundEvents, type ProcessReport } from './inbound/process';
+import { runDueDocumentJobs, type DocumentJobPassReport } from './domain/document-job-worker';
 
 export interface EngineConfig {
   readonly db: SqlDatabase;
@@ -32,9 +33,11 @@ export interface EngineConfig {
   readonly pollIntervalMs?: number;
   /** How often each account's health is re-checked with its provider (default 15 minutes, §6.5). */
   readonly healthIntervalMs?: number;
+  readonly documentJobRunner?: DocumentJobRunner;
 }
 
 export interface WorkerPassReport extends ExecutionPassReport {
+  readonly documentJobs: DocumentJobPassReport;
   readonly health: { readonly checked: number; readonly changed: number };
   readonly polled: number;
   readonly inbound: ProcessReport;
@@ -74,7 +77,7 @@ export function createEngine(config: EngineConfig): Engine {
     ...(config.hooks ? { hooks: config.hooks } : {}),
     ...(config.random ? { random: config.random } : {}),
   };
-  const env: DomainEnv = { db: config.db, now, adapters, exec, ...(config.unsubscribe ? { unsubscribe: config.unsubscribe } : {}) };
+  const env: DomainEnv = { db: config.db, now, adapters, exec, ...(config.unsubscribe ? { unsubscribe: config.unsubscribe } : {}), ...(config.documentJobRunner ? { documentJobRunner: config.documentJobRunner } : {}) };
   holder.env = env;
   const pollIntervalMs = config.pollIntervalMs ?? 5 * 60_000;
   const healthIntervalMs = config.healthIntervalMs ?? 15 * 60_000;
@@ -87,7 +90,8 @@ export function createEngine(config: EngineConfig): Engine {
       const polled = await pollDueMailboxes(env, pollIntervalMs);
       await pollSocialInboxes(env);
       const inbound = processInboundEvents(env);
-      return { health, polled, inbound, ...(await runExecutionPass(exec)) };
+      const documentJobs = await runDueDocumentJobs(env);
+      return { health, polled, inbound, documentJobs, ...(await runExecutionPass(exec)) };
     },
   };
 }

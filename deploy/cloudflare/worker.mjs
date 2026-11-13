@@ -66,9 +66,10 @@ export function createWorker({ fetchImpl = fetch } = {}) {
           if (!member.ok) return json({ error: 'invitation_required' }, 403);
           const asset = await env.ASSETS.fetch(new Request(cfg.origin + '/publishing-studio.html'));
           const html = await asset.text();
+          const previewHash = html.match(/<meta name="carl-document-preview-script-hash" content="(sha256-[A-Za-z0-9+/]{43}=)">/)?.[1];
           const hashes = await Promise.all([...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(async match => { const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(match[1])); return ` 'sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}'`; }));
           const headers = new Headers(asset.headers); headers.set('cache-control', 'private, no-store'); headers.set('x-frame-options', 'DENY'); headers.set('referrer-policy', 'no-referrer');
-          headers.set('content-security-policy', `default-src 'self'; script-src 'self'${hashes.join('')}; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`);
+          headers.set('content-security-policy', `default-src 'self'; script-src 'self'${hashes.join('')}${previewHash ? ` '${previewHash}'` : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`);
           return new Response(html, { status: asset.status, headers });
         }
         return json({ error: 'not_found' }, 404);

@@ -38,6 +38,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "playwright": "1.65.0",
     "@splitin/outreach-contracts": "0.0.0",
     "@splitin/outreach-core": "0.0.0",
     "@splitin/outreach-fakes": "0.0.0",

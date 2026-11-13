@@ -62,6 +62,8 @@ async function fixture(page: Page) {
         value = { package: pack, authorizationId: 'fixture-authorization', operationHash: 'a'.repeat(64), preview: { posts: manifest.publishingPlans, contacts: manifest.contacts, sequences: manifest.outreachSequences, issues: pack.issues, renderedActions: [{ id: 'fixture-action', payload: { channel: 'linkedin', targetUrl: manifest.contacts[0]?.linkedin } }] } };
       } else if (action === 'account-check') { account.health = 'ok'; value = { status: 'ok' }; }
       else if (action === 'publishing-overview') value = data;
+      else if (action === 'work-package-document') value = {};
+      else if (action === 'document-job-list') value = { jobs: [] };
       else throw new Error('Unexpected fixture operation: ' + action);
       await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ stdout: JSON.stringify({ ok: true, data: value }) }) }); return;
     }
@@ -78,6 +80,7 @@ async function uploadReport(page: Page, source: string) {
   await page.getByRole('button', { name: 'Import report', exact: true }).click();
   await page.getByLabel('HTML plan or research report').setInputFiles({ name: 'report.html', mimeType: 'text/html', buffer: Buffer.from(source) });
   await page.getByRole('button', { name: 'Import and check files', exact: true }).click();
+  await page.getByRole('button', { name: 'Review execution plan', exact: true }).click();
 }
 const browserTest = it.skipIf(process.env.OUTREACH_BROWSER_FIXTURES !== '1');
 browserTest('uploads a report, opens retained actions, repairs account/schedule and prepares without sending', async () => {

@@ -1,4 +1,4 @@
-import type { ProviderAdapter, SqlDatabase } from '@splitin/outreach-contracts';
+import type { DocumentJobRunner, ProviderAdapter, SqlDatabase } from '@splitin/outreach-contracts';
 import type { ExecutionDeps } from '../execution/types';
 
 export interface UnsubscribeConfig {
@@ -21,6 +21,7 @@ export interface DomainEnv {
   readonly unsubscribe?: UnsubscribeConfig;
   /** Execution wiring, used by services that trigger worker-level operations (review resolution). */
   readonly exec: ExecutionDeps;
+  readonly documentJobRunner?: DocumentJobRunner;
 }
 
 export interface CampaignVersionRow {

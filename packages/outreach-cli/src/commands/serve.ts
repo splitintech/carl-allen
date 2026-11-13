@@ -38,7 +38,7 @@ export const runtimeCommands: Command[] = [
       while (!stopping) {
         await maintenance();
         const report = await rt.engine.runOnce();
-        if (report.execute.claimed || report.inbound.processed || report.reconcile.found + report.reconcile.absent) out.result({ at: new Date().toISOString(), ...report });
+        if (report.execute.claimed || report.inbound.processed || report.reconcile.found + report.reconcile.absent || report.documentJobs.started || report.documentJobs.needsAttention || report.documentJobs.recovered) out.result({ at: new Date().toISOString(), ...report });
         const until = Date.now() + interval;
         while (!stopping && Date.now() < until) await new Promise((resolve) => setTimeout(resolve, Math.min(250, until - Date.now())));
       }

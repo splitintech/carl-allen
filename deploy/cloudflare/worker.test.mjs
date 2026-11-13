@@ -1,5 +1,6 @@
 /* global crypto, Request, Response */
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
 import { createWorker } from './worker.mjs';
 import { beginLogin, verifyJwt } from './auth.mjs';
@@ -39,10 +40,12 @@ test('web mutations enforce CSRF and bind actual identity, route and bytes witho
   assert.equal((await worker.fetch(new Request('https://carl.test/api/v1/work-packages', { method: 'POST', headers: { cookie, origin: 'https://evil.test', 'x-carl-csrf': 'fixture-csrf' } }), env)).status, 403);
 });
 test('static HTML requires workspace membership and uses exact inline script CSP hashes', async () => {
-  const html = '<!doctype html><script>console.log("fixture")</script>';
+  const previewHash = `sha256-${Buffer.from('x'.repeat(32)).toString('base64')}`;
+  const html = `<!doctype html><meta name="carl-document-preview-script-hash" content="${previewHash}"><script>console.log("fixture")</script>`;
   const worker = createWorker({ fetchImpl: async () => Response.json({ roles: ['viewer'] }) });
   const response = await worker.fetch(new Request('https://carl.test/', { headers: { cookie: await cookieFor() } }), { ...env, ASSETS: { fetch: async () => new Response(html) } });
   assert.equal(response.status, 200); assert.equal(await response.text(), html); assert.match(response.headers.get('content-security-policy'), /script-src 'self' 'sha256-/); assert.doesNotMatch(response.headers.get('content-security-policy'), /script-src[^;]*unsafe-inline/);
+  assert.ok(response.headers.get('content-security-policy').includes(`'${previewHash}'`)); assert.match(response.headers.get('content-security-policy'), /frame-src 'self'/);
   const denied = createWorker({ fetchImpl: async () => Response.json({ error: 'unknown_member' }, { status: 403 }) });
   assert.equal((await denied.fetch(new Request('https://carl.test/', { headers: { cookie: await cookieFor() } }), env)).status, 403);
 });

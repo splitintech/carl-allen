@@ -5,9 +5,11 @@ import type { Hono } from 'hono';
 import { auth, type ServerEnv } from './app';
 import {stageWorkPackageMedia} from '@splitin/outreach-core';
 import { workPackageView } from './work-package-views';
+import { registerDocumentJobRoutes } from './routes-document-jobs';
 const page=z.object({cursor:z.string().max(200).optional(),limit:z.coerce.number().int().min(1).max(200).default(100)}).passthrough();
 const repair=z.object({manifest:z.unknown().optional(),accountMap:z.record(z.string(),z.string()).optional(),mediaMap:z.record(z.string(),z.string()).optional()}).strict();
 export function registerWorkspaceRoutes(app:Hono<ServerEnv>,engine:Engine):void {
+ registerDocumentJobRoutes(app,engine);
  app.get('/v1/home',(c)=>c.json({home:workspaceHome(engine,auth(c))}));
  app.get('/v1/work-packages/template',(c)=>{requireRole(auth(c),'viewer');return c.json({html:workPackageTemplate()});});
  app.post('/v1/work-packages',async(c)=>{
