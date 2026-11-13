@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, sep } from 'node:path';
 import { handle } from './bundle/apps/outreach-console/backend/outreach.mjs';
+import { HTML_DOCUMENT_PREVIEW_SCRIPT_HASH } from '@splitin/outreach-import';
 
 const bundle = resolve(dirname(fileURLToPath(import.meta.url)), 'bundle/apps/outreach-console');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
@@ -63,7 +64,7 @@ export function createPublishingPreview({ handler = handle, standalone = false }
       let content;
       try { content = await readFile(file); } catch { return send(response, 404, { error: 'No such asset' }); }
       const hashes = single ? [...content.toString('utf8').matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(match => ` 'sha256-${createHash('sha256').update(match[1]).digest('base64')}'`).join('') : '';
-      response.writeHead(200, { 'content-type': types[extname(file)], 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': `default-src 'self'; script-src 'self'${hashes}; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self'; frame-src 'none'; base-uri 'none'; frame-ancestors 'none'` });
+      response.writeHead(200, { 'content-type': types[extname(file)], 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'content-security-policy': `default-src 'self'; script-src 'self' '${HTML_DOCUMENT_PREVIEW_SCRIPT_HASH}'${hashes}; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'none'` });
       response.end(request.method === 'HEAD' ? undefined : content);
     } catch { send(response, 500, { error: 'Preview request failed' }); }
   });

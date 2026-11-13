@@ -39,9 +39,11 @@
   },
   "dependencies": {
     "@splitin/outreach-contracts": "0.0.0",
+    "acorn": "^8.15.0",
     "csv-parse": "^7.0.3",
     "exceljs": "^4.4.0",
     "parse5": "^8.0.1",
+    "postcss": "^8.5.28",
     "zod": "^4.6.6"
   },
   "devDependencies": {

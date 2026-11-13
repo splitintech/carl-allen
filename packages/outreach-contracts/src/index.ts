@@ -9,6 +9,7 @@ export * from './audit';
 export * from './mime';
 
 export * from './work-package';
+export * from './document-jobs';
 
 export * from './publishing';
 export * from './media-probe';

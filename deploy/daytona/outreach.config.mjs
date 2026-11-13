@@ -15,6 +15,7 @@ function optionalJson(path, fallback) {
   } catch (error) { if (error.code === 'ENOENT') return fallback; throw error; }
 }
 export default {
+  documentJobs: { enabled: process.env.OUTREACH_DOCUMENT_JOBS !== '0', executablePath: process.env.OUTREACH_DOCUMENT_CHROME_EXECUTABLE ?? process.env.OUTREACH_CHROME_EXECUTABLE ?? '/usr/bin/google-chrome-stable' },
   execution: { publishingMediaTimeoutMs: Number(process.env.OUTREACH_PUBLISHING_MEDIA_TIMEOUT_MS ?? 180000) },
   adapters: [
     socialBrowserAdapter({

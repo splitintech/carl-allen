@@ -34,4 +34,12 @@ describe('publishing Papr backend bridge', () => {
     expect(result.data).toMatchObject({ accounts: [], liveViewUrl: null });
     expect(JSON.stringify(result)).not.toContain('engine-private'); expect(JSON.stringify(result)).not.toContain('preview-private');
   });
+  it('proxies document reads and durable job operations through fixed authenticated routes', async () => {
+    const seen = setup(); const input = { sourceHash: 'a'.repeat(64), selectedActionIds: ['action-1'], scheduledFor: '2026-11-14T15:00:00Z', timezone: 'UTC', idempotencyKey: 'fixture-key' };
+    expect((await handle('work-package-document', { packageId: id })).ok).toBe(true);
+    await handle('document-job-create', { packageId: id, input }); await handle('document-job-list', { packageId: id }); await handle('document-job-get', { jobId: id }); await handle('document-job-update', { jobId: id, input: { expectedRevision: 2, paused: true } });
+    expect(seen.map((request) => request.url)).toEqual([`https://private-preview.example.test/v1/work-packages/${id}/document`, `https://private-preview.example.test/v1/work-packages/${id}/document-jobs`, `https://private-preview.example.test/v1/work-packages/${id}/document-jobs`, `https://private-preview.example.test/v1/document-jobs/${id}`, `https://private-preview.example.test/v1/document-jobs/${id}`]);
+    expect(JSON.parse(String(seen[1]!.options.body))).toEqual(input); expect(seen[4]!.options.method).toBe('PATCH');
+    const count = seen.length; expect((await handle('document-job-get', { jobId: '../tokens' })).ok).toBe(false); expect(seen).toHaveLength(count);
+  });
 });

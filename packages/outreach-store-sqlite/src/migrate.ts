@@ -1,6 +1,7 @@
 import { SCHEMA_0013 } from './schema-0013';
 import {SCHEMA_0014} from './schema-0014';
 import {SCHEMA_0015} from './schema-0015';
+import { SCHEMA_0016 } from './schema-0016';
 import { SCHEMA_0012 } from './schema-0012';
 import { SCHEMA_0011 } from './schema-0011';
 import { SCHEMA_0010 } from './schema-0010';
@@ -36,6 +37,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: '0013_social_login_sessions', sql: SCHEMA_0013 },
   { id:'0014_mailbox_oauth',sql:SCHEMA_0014 },
   { id:'0015_account_lifecycle',sql:SCHEMA_0015 },
+  { id: '0016_document_jobs', sql: SCHEMA_0016 },
 ];
 
 export class MigrationDriftError extends Error {

@@ -10,6 +10,7 @@ privateJson(`${home}/runtime.env.json`, {
   DAYTONA_SANDBOX_ID: process.env.DAYTONA_SANDBOX_ID,
   OUTREACH_WORKSPACE: process.env.OUTREACH_WORKSPACE ?? 'default',
   OUTREACH_PRINCIPAL: 'runtime:admin',
+  OUTREACH_CONFIG: process.env.OUTREACH_CONFIG ?? '/opt/outreach/deploy/daytona/outreach.config.mjs',
 });
 const prior = runtimeOwner(home);
 if (!prior) {

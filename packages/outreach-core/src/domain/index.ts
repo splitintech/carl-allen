@@ -44,3 +44,5 @@ export * from './workspace-dashboard';
 
 export * from './account-lifecycle';
 export * from './publishing-preflight';
+export * from './document-jobs';
+export * from './document-job-worker';
