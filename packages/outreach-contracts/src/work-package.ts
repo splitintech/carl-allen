@@ -7,7 +7,7 @@ const media = z.object({ id: identifier, name: z.string().min(1).max(200).refine
 const contact = z.object({ id: identifier, name: z.string().min(1).max(300), email: z.string().email().optional(), linkedin: https.optional(), instagram: https.optional(), sources: z.array(https).max(50).default([]), notes: z.string().max(10_000).default(''), consentBasis: z.enum(['consent','legitimate_interest','existing_relationship','unknown']).default('unknown'), jurisdiction: z.string().max(20).default('unknown') }).strict();
 const post = z.object({ id: identifier, accountRef: identifier, channel: z.enum(['linkedin','x','instagram','tiktok']), text, media: z.array(identifier).max(20).default([]), scheduledFor: z.string().datetime({offset:true}), format: z.enum(['feed','carousel','video','reel']).default('feed'), firstComment: z.string().max(3000).optional(), tags: z.array(identifier).max(20).default([]) }).strict();
 const step = z.object({ id: identifier, accountRef: identifier, channel: z.enum(['linkedin','instagram','email']), kind: z.enum(['message','connect','email']), text, subject: z.string().max(1000).optional(), waitHours: z.number().min(0).max(2160).default(0), waitFor: z.enum(['elapsed','connected']).default('elapsed') }).strict();
-const sequence = z.object({ id: identifier, name: z.string().max(200), contacts: z.array(identifier).min(1).max(1000), scheduledFor: z.string().datetime({offset:true}), steps: z.array(step).min(1).max(20) }).strict();
+const sequence = z.object({ id: identifier, name: z.string().max(200), contacts: z.array(identifier).min(1).max(1000), scheduledFor: z.string().datetime({offset:true}).nullable().default(null), steps: z.array(step).min(1).max(20) }).strict();
 const reply = z.object({ id: identifier, accountRef: identifier, channel: z.enum(['linkedin','instagram','email']), contains: z.string().min(2).max(300), text: z.string().min(1).max(10_000), subject: z.string().max(1000).optional(), validUntil: z.string().datetime({offset:true}), maxResponsesPerContact: z.number().int().min(1).max(3).default(1), minGapHours: z.number().min(24).max(2160).default(24) }).strict();
 export const WorkPackageManifest = z.object({ schemaVersion: z.literal(1), packageId: identifier, revision: z.number().int().min(1).max(1_000_000), name: z.string().trim().min(1).max(200), timezone: z.string().min(1).max(100).default('America/New_York'), accountRefs: z.array(z.object({ id: identifier, channel: WorkChannel, label: z.string().min(1).max(200) }).strict()).max(100).default([]), contacts: z.array(contact).max(10_000).default([]), media: z.array(media).max(1000).default([]), publishingPlans: z.array(post).max(1000).default([]), outreachSequences: z.array(sequence).max(100).default([]), replyPlaybooks: z.array(reply).max(100).default([]) }).strict().superRefine((v,ctx) => {
   try { new Intl.DateTimeFormat('en',{timeZone:v.timezone}).format(); } catch { ctx.addIssue({code:'custom',message:'Invalid timezone',path:['timezone']}); }
@@ -16,4 +16,18 @@ export const WorkPackageManifest = z.object({ schemaVersion: z.literal(1), packa
   }
 });
 export type WorkManifest = z.infer<typeof WorkPackageManifest>;
-export interface WorkPackageIssue { field: string; message: string }
+export interface WorkPackageIssue { field: string; message: string; severity?: 'info' | 'warning' | 'error' }
+
+const actionBase = { id: identifier, label: z.string().min(1).max(500), source: z.string().min(1).max(100) };
+const hasControls = (value: string) => [...value].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
+const navigationHref = z.string().max(10_000).url().refine((value) => {
+  const url = new URL(value);
+  return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !hasControls(value);
+}, 'Expected credential-free HTTP(S) URL');
+const mailAddress = z.string().email().max(320);
+export const HtmlImportAction = z.discriminatedUnion('kind', [
+  z.object({ ...actionBase, kind: z.literal('open_url'), href: navigationHref }).strict(),
+  z.object({ ...actionBase, kind: z.literal('compose_email'), href: z.string().max(30_000).refine((value) => /^mailto:/i.test(value) && !hasControls(value), 'Expected mailto destination'), email: z.object({ to: z.array(mailAddress).max(100), cc: z.array(mailAddress).max(100), bcc: z.array(mailAddress).max(100), subject: z.string().max(1000).refine((value) => !hasControls(value)).optional(), body: z.string().max(20_000).optional() }).strict() }).strict(),
+  z.object({ ...actionBase, kind: z.literal('unsupported'), reason: z.string().min(1).max(1000) }).strict(),
+]);
+export type HtmlImportAction = z.infer<typeof HtmlImportAction>;

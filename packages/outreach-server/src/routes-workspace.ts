@@ -4,6 +4,7 @@ import { getWorkspaceExecutionLimits,setWorkspaceExecutionLimits,workspaceStorag
 import type { Hono } from 'hono';
 import { auth, type ServerEnv } from './app';
 import {stageWorkPackageMedia} from '@splitin/outreach-core';
+import { workPackageView } from './work-package-views';
 const page=z.object({cursor:z.string().max(200).optional(),limit:z.coerce.number().int().min(1).max(200).default(100)}).passthrough();
 const repair=z.object({manifest:z.unknown().optional(),accountMap:z.record(z.string(),z.string()).optional(),mediaMap:z.record(z.string(),z.string()).optional()}).strict();
 export function registerWorkspaceRoutes(app:Hono<ServerEnv>,engine:Engine):void {
@@ -17,12 +18,12 @@ export function registerWorkspaceRoutes(app:Hono<ServerEnv>,engine:Engine):void 
     const row=engine.db.prepare('SELECT extracted_data FROM work_packages WHERE id=?').get<{extracted_data:string}>(pkg.id)!;
     engine.db.prepare('UPDATE work_packages SET extracted_data=? WHERE id=?').run(JSON.stringify({...JSON.parse(row.extracted_data),originalRemoteReady:true}),pkg.id);
   }
-  return c.json({package:getWorkPackage(engine,auth(c),pkg.id)},201);
+  return c.json({package:workPackageView(engine,auth(c),getWorkPackage(engine,auth(c),pkg.id))},201);
  });
- app.get('/v1/work-packages',(c)=>{const q=page.parse(c.req.query());const packages=listWorkPackages(engine,auth(c),q.cursor,q.limit);return c.json({packages,nextCursor:packages.length===q.limit?packages.at(-1)?.id:null});});
- app.get('/v1/work-packages/:id',(c)=>c.json({package:getWorkPackage(engine,auth(c),c.req.param('id'))}));
- app.patch('/v1/work-packages/:id',async(c)=>c.json({package:repairWorkPackage(engine,auth(c),c.req.param('id'),repair.parse(await c.req.json()))}));
- app.post('/v1/work-packages/:id/prepare',async(c)=>{await stageWorkPackageMedia(engine,auth(c),c.req.param('id'));return c.json(prepareWorkPackage(engine,auth(c),c.req.param('id')));});
+ app.get('/v1/work-packages',(c)=>{const q=page.parse(c.req.query());const packages=listWorkPackages(engine,auth(c),q.cursor,q.limit).map(pack=>workPackageView(engine,auth(c),pack));return c.json({packages,nextCursor:packages.length===q.limit?packages.at(-1)?.id:null});});
+ app.get('/v1/work-packages/:id',(c)=>c.json({package:workPackageView(engine,auth(c),getWorkPackage(engine,auth(c),c.req.param('id')))}));
+ app.patch('/v1/work-packages/:id',async(c)=>c.json({package:workPackageView(engine,auth(c),repairWorkPackage(engine,auth(c),c.req.param('id'),repair.parse(await c.req.json())))}));
+ app.post('/v1/work-packages/:id/prepare',async(c)=>{await stageWorkPackageMedia(engine,auth(c),c.req.param('id'));const prepared=prepareWorkPackage(engine,auth(c),c.req.param('id'));return c.json({...prepared,package:workPackageView(engine,auth(c),prepared.package)});});
  app.post('/v1/plan-authorizations/:id/approve',async(c)=>{
   const input=z.object({operationHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict().parse(await c.req.json());const approval=decideApproval(engine,auth(c),{approvalId:c.req.param('id'),decision:'approved',...input});
   const actions=engine.db.prepare('SELECT action_id FROM plan_actions WHERE authorization_id=?').all<{action_id:string}>(approval.id);
