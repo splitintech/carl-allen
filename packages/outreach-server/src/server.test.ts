@@ -65,7 +65,7 @@ async function setup() {
     app.request(path, {
       method,
       headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body !== undefined && !(body instanceof Uint8Array) ? { 'content-type': 'application/json' } : {}), ...headers },
-      ...(body === undefined ? {} : { body: body instanceof Uint8Array ? body : JSON.stringify(body) }),
+      ...(body === undefined ? {} : { body: body instanceof Uint8Array ? Uint8Array.from(body) : JSON.stringify(body) }),
     });
   return { engine, db, fake, admin, accountId, tokens, app, call, advance: (ms: number) => { now += ms; } };
 }

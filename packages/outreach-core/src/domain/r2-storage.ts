@@ -78,7 +78,7 @@ export async function putImmutableDocument(workspaceId: string, sha256: string, 
   const body = typeof content === 'string' ? Buffer.from(content, 'utf8') : content;
   if (body.length > 25 * 1024 * 1024 || createHash('sha256').update(body).digest('hex') !== sha256) throw new Error('Invalid document checksum or size');
   const request = requestConfig('PUT', { workspaceId, sha256, mime, size: body.length });
-  const response = await fetch(request.url, { method: 'PUT', headers: { ...request.headers, 'content-type': mime, 'content-length': String(body.length) }, body, redirect: 'error', signal: AbortSignal.timeout(60000) });
+  const response = await fetch(request.url, { method: 'PUT', headers: { ...request.headers, 'content-type': mime, 'content-length': String(body.length) }, body: Uint8Array.from(body), redirect: 'error', signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error('Private document upload failed');
   const receipt = await response.json() as {stored?:boolean;sha256?:string;size?:number};
   if (!receipt.stored || receipt.sha256 !== sha256 || receipt.size !== body.length) throw new Error('Private document receipt mismatch');

@@ -38,7 +38,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@splitin/outreach-contracts": "0.0.0"
+    "@splitin/outreach-contracts": "0.0.0",
+    "@splitin/spiderman-oauth-loopback": "https://github.com/splitintech/spiderman/releases/download/v0.1.0-alpha.2/splitin-spiderman-oauth-loopback-0.1.0-alpha.2.tgz"
   },
   "bugs": {
     "url": "https://github.com/splitintech/outreach-engine/issues"
