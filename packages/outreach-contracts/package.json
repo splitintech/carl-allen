@@ -41,6 +41,7 @@
     "url": "https://github.com/splitintech/outreach-engine/issues"
   },
   "dependencies": {
+    "@splitin/spiderman-mail-mime": "https://github.com/splitintech/spiderman/releases/download/v0.1.0-alpha.2/splitin-spiderman-mail-mime-0.1.0-alpha.2.tgz",
     "zod": "^4.6.6"
   }
 }
