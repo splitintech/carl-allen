@@ -2,8 +2,8 @@ import { expect, it } from 'vitest';
 import { chromium } from 'playwright';
 import { buildHtmlDocumentPreview } from './document-preview';
 
-it.skipIf(process.env.OUTREACH_DOCUMENT_BROWSER_FIXTURES !== '1')('renders the original layout in an opaque sandbox and selects triggers without original effects or requests', async () => {
-  const browser = await chromium.launch({ executablePath: process.env.OUTREACH_TEST_CHROME || '/Users/omkarchavan/Library/Caches/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-mac-arm64/chrome-headless-shell', headless: true, timeout: 15_000 });
+it.skipIf(process.env.OUTREACH_DOCUMENT_BROWSER_FIXTURES !== '1' && process.env.OUTREACH_BROWSER_FIXTURES !== '1')('renders the original layout in an opaque sandbox and selects triggers without original effects or requests', async () => {
+  const browser = await chromium.launch({ executablePath: process.env.OUTREACH_TEST_CHROME || chromium.executablePath(), headless: true, timeout: 15_000 });
   try {
     const page = await browser.newPage(); const unexpectedRequests: string[] = []; const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));

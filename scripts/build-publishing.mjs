@@ -4,8 +4,11 @@ import { build } from 'esbuild';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HTML_DOCUMENT_PREVIEW_SCRIPT_HASH } from '@splitin/outreach-import';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// The standalone build also runs immediately after npm ci, before workspace dist files exist.
+// Compile the authoritative preview policy directly instead of importing the built importer.
+const policy = await build({ entryPoints: [resolve(root, 'packages/outreach-import/src/document-preview-policy.ts')], bundle: true, write: false, format: 'esm', platform: 'node', logLevel: 'silent' });
+const { HTML_DOCUMENT_PREVIEW_SCRIPT_HASH } = await import(`data:text/javascript;base64,${Buffer.from(policy.outputFiles[0].text).toString('base64')}`);
 const app = resolve(root, 'apps/papr/bundle/apps/outreach-console');
 const result = await build({ entryPoints: [resolve(app, 'publishing/controller.js')], bundle: true, write: false, format: 'iife', target: ['chrome110'], minify: false, legalComments: 'none' });
 let html = readFileSync(resolve(app, 'publishing.html'), 'utf8');
